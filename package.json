@@ -14,7 +14,8 @@
     "client:dev": "npm --prefix client run dev",
     "client:build": "npm --prefix client run build",
     "client:preview": "npm --prefix client run preview",
-    "create:admin": "node scripts/createAdmin.js"
+    "create:admin": "node scripts/createAdmin.js",
+    "test": "vitest"
   },
   "keywords": [
     "quiz",
@@ -36,6 +37,9 @@
   },
   "devDependencies": {
     "nodemon": "^3.0.3",
-    "prisma": "^5.15.0"
+    "pg-mem": "^3.0.4",
+    "prisma": "^5.15.0",
+    "supertest": "^6.3.3",
+    "vitest": "^1.6.0"
   }
 }

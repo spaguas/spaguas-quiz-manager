@@ -93,6 +93,14 @@ const AdminLogin = () => {
           <button className="button" type="submit" disabled={loading}>
             {loading ? 'Entrando...' : 'Entrar'}
           </button>
+
+          <button
+            className="button ghost"
+            type="button"
+            onClick={() => navigate('/auth/forgot-password')}
+          >
+            Esqueci minha senha
+          </button>
         </div>
       </form>
     </div>

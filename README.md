@@ -17,7 +17,7 @@ Sistema de Quiz completo construído com Node.js, Express, Prisma, PostgreSQL e 
 - Uma ferramenta de cliente HTTP (Insomnia, Postman, cURL, etc.)
 
 ## Configuração do backend
-1. Duplique `.env.example` para `.env`, ajuste `DATABASE_URL` para sua instância Postgres e defina um `JWT_SECRET` forte.
+1. Duplique `.env.example` para `.env`, ajuste `DATABASE_URL` para sua instância Postgres, defina um `JWT_SECRET` forte e configure `PASSWORD_RESET_TOKEN_EXPIRY_MINUTES` conforme a política desejada (padrão: 60 minutos).
 2. Instale as dependências (executado fora deste ambiente):
    ```bash
    npm install
@@ -88,6 +88,7 @@ O servidor será iniciado em `http://localhost:3000` (ajuste a porta via variáv
   ```bash
   npm run create:admin -- --name "Admin" --email "admin@exemplo.com" --password "senha"
   ```
+- Usuários autenticados podem atualizar seus dados e alterar a senha em `/account/profile`. Caso esqueçam a senha, utilizam `/auth/forgot-password` para gerar um token e `/auth/reset-password` para defini-la novamente.
 
 ## Estrutura do banco
 O schema Prisma (`prisma/schema.prisma`) define as seguintes tabelas principais:
@@ -105,6 +106,13 @@ Todos os endpoints estão disponíveis sob o prefixo `/api`.
 ### Autenticação
 - `POST /api/auth/register` – cria uma conta (primeiro usuário é administrador por padrão).
 - `POST /api/auth/login` – autentica o usuário e retorna o token JWT.
+- `GET /api/auth/me` – obtém o perfil do usuário autenticado.
+- `PUT /api/auth/me` – atualiza dados do perfil (nome/e-mail).
+- `PUT /api/auth/me/password` – altera a senha informando a senha atual.
+- `POST /api/auth/forgot-password` – gera token de redefinição (válido por tempo limitado).
+- `POST /api/auth/reset-password` – redefine a senha usando o token gerado.
+
+> Em ambiente de desenvolvimento o endpoint de recuperação retorna o token gerado para facilitar testes. Em produção, envie-o por e-mail ao usuário.
 
 ### Administração
 - `POST /api/admin/quizzes` – cria um novo quiz.

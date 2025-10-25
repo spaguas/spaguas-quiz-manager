@@ -33,7 +33,7 @@ function readStoredSession() {
   try {
     return JSON.parse(raw);
   } catch (error) {
-    window.localStorage.removeItem(STORAGE_KEY);
+    window.localStorage.removeItem(AUTH_STORAGE_KEY);
     return null;
   }
 }
@@ -69,6 +69,29 @@ export const AuthProvider = ({ children }) => {
     window.localStorage.removeItem(AUTH_STORAGE_KEY);
   }, []);
 
+  const updateStoredUser = useCallback((updatedUser) => {
+    setUser(updatedUser);
+    setToken((currentToken) => {
+      if (currentToken) {
+        setAxiosAuthorization(currentToken);
+      }
+      return currentToken;
+    });
+
+    if (typeof window !== 'undefined') {
+      const raw = window.localStorage.getItem(AUTH_STORAGE_KEY);
+      if (raw) {
+        try {
+          const session = JSON.parse(raw);
+          session.user = updatedUser;
+          window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(session));
+        } catch (error) {
+          window.localStorage.removeItem(AUTH_STORAGE_KEY);
+        }
+      }
+    }
+  }, []);
+
   const login = useCallback(async ({ email, password }) => {
     const response = await api.post('/auth/login', { email, password });
     persistSession(response.data);
@@ -85,6 +108,33 @@ export const AuthProvider = ({ children }) => {
     clearSession();
   }, [clearSession]);
 
+  const fetchProfile = useCallback(async () => {
+    const response = await api.get('/auth/me');
+    updateStoredUser(response.data);
+    return response.data;
+  }, [updateStoredUser]);
+
+  const updateProfile = useCallback(async (payload) => {
+    const response = await api.put('/auth/me', payload);
+    updateStoredUser(response.data);
+    return response.data;
+  }, [updateStoredUser]);
+
+  const changePassword = useCallback(async ({ currentPassword, newPassword }) => {
+    const response = await api.put('/auth/me/password', { currentPassword, newPassword });
+    return response.data;
+  }, []);
+
+  const requestPasswordReset = useCallback(async ({ email }) => {
+    const response = await api.post('/auth/forgot-password', { email });
+    return response.data;
+  }, []);
+
+  const resetPassword = useCallback(async ({ token: resetToken, password }) => {
+    const response = await api.post('/auth/reset-password', { token: resetToken, password });
+    return response.data;
+  }, []);
+
   const value = useMemo(
     () => ({
       user,
@@ -93,9 +143,26 @@ export const AuthProvider = ({ children }) => {
       login,
       logout,
       register,
+      fetchProfile,
+      updateProfile,
+      changePassword,
+      requestPasswordReset,
+      resetPassword,
       isAdmin: user?.role === 'ADMIN',
     }),
-    [user, token, loading, login, logout, register],
+    [
+      user,
+      token,
+      loading,
+      login,
+      logout,
+      register,
+      fetchProfile,
+      updateProfile,
+      changePassword,
+      requestPasswordReset,
+      resetPassword,
+    ],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -69,6 +69,9 @@ const Layout = () => {
               <span className="user-chip">
                 {user.name} <span className="user-chip-role">{user.role}</span>
               </span>
+              <NavLink to="/account/profile" className="button ghost">
+                Meu perfil
+              </NavLink>
               <button className="button ghost" type="button" onClick={handleLogout}>
                 Sair
               </button>

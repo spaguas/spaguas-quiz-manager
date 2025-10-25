@@ -286,7 +286,7 @@ export async function createSubmission({ quizId, userName, userEmail, answers },
   const submission = await prisma.submission.create({
     data: {
       quizId,
-      userId: actor?.id ?? null,
+      userId: actor?.id ? Number(actor.id) : null,
       userName: userName || actor?.name || 'Participante',
       userEmail: normalizedEmail,
       score: correctAnswers,

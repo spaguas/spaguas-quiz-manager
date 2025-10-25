@@ -3,6 +3,7 @@ import crypto from 'node:crypto';
 import prisma from '../config/prisma.js';
 import HttpError from '../utils/httpError.js';
 import { comparePassword, hashPassword } from '../utils/password.js';
+import { sendPasswordResetEmail } from '../utils/mailer.js';
 
 function buildTokenPayload(user) {
   return {
@@ -197,6 +198,11 @@ export async function requestPasswordReset(email) {
       userId: user.id,
       expiresAt: buildResetExpiryDate(),
     },
+  });
+
+  await sendPasswordResetEmail({
+    email,
+    token,
   });
 
   return {

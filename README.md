@@ -89,6 +89,7 @@ O servidor será iniciado em `http://localhost:3000` (ajuste a porta via variáv
   npm run create:admin -- --name "Admin" --email "admin@exemplo.com" --password "senha"
   ```
 - Usuários autenticados podem atualizar seus dados e alterar a senha em `/account/profile`. Caso esqueçam a senha, utilizam `/auth/forgot-password` para gerar um token e `/auth/reset-password` para defini-la novamente.
+- Configure as credenciais SMTP no `.env` (`SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM`, `APP_URL`) para que os e-mails de recuperação sejam enviados automaticamente.
 
 ## Estrutura do banco
 O schema Prisma (`prisma/schema.prisma`) define as seguintes tabelas principais:
@@ -112,7 +113,7 @@ Todos os endpoints estão disponíveis sob o prefixo `/api`.
 - `POST /api/auth/forgot-password` – gera token de redefinição (válido por tempo limitado).
 - `POST /api/auth/reset-password` – redefine a senha usando o token gerado.
 
-> Em ambiente de desenvolvimento o endpoint de recuperação retorna o token gerado para facilitar testes. Em produção, envie-o por e-mail ao usuário.
+> Em ambiente de desenvolvimento o endpoint de recuperação retorna o token gerado para facilitar testes. Em produção, o token é enviado por e-mail via SMTP.
 
 ### Administração
 - `POST /api/admin/quizzes` – cria um novo quiz.

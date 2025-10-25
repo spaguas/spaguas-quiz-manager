@@ -135,6 +135,18 @@ export const AuthProvider = ({ children }) => {
     return response.data;
   }, []);
 
+  const getGamification = useCallback(async () => {
+    const response = await api.get('/gamification/profile');
+    return response.data;
+  }, []);
+
+  const getLeaderboard = useCallback(async (limit) => {
+    const response = await api.get('/gamification/leaderboard', {
+      params: { limit },
+    });
+    return response.data;
+  }, []);
+
   const value = useMemo(
     () => ({
       user,
@@ -148,6 +160,8 @@ export const AuthProvider = ({ children }) => {
       changePassword,
       requestPasswordReset,
       resetPassword,
+      getGamification,
+      getLeaderboard,
       isAdmin: user?.role === 'ADMIN',
     }),
     [
@@ -162,6 +176,8 @@ export const AuthProvider = ({ children }) => {
       changePassword,
       requestPasswordReset,
       resetPassword,
+      getGamification,
+      getLeaderboard,
     ],
   );
 

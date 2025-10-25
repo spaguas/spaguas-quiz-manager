@@ -61,6 +61,12 @@ const Layout = () => {
             >
               Quizzes Ativos
             </NavLink>
+            <NavLink
+              to="/leaderboard"
+              className={({ isActive }) => (isActive ? 'nav-link active' : 'nav-link')}
+            >
+              Ranking Global
+            </NavLink>
           </div>
         </nav>
         <div className="auth-actions">

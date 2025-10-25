@@ -14,6 +14,7 @@ import ResetPassword from './pages/ResetPassword.jsx';
 import PlayerQuizList from './pages/PlayerQuizList.jsx';
 import PlayerQuizPlay from './pages/PlayerQuizPlay.jsx';
 import PlayerRanking from './pages/PlayerRanking.jsx';
+import Leaderboard from './pages/Leaderboard.jsx';
 
 const App = () => (
   <BrowserRouter>
@@ -23,6 +24,7 @@ const App = () => (
         <Route path="/play" element={<PlayerQuizList />} />
         <Route path="/play/quiz/:quizId" element={<PlayerQuizPlay />} />
         <Route path="/play/quiz/:quizId/ranking" element={<PlayerRanking />} />
+        <Route path="/leaderboard" element={<Leaderboard />} />
 
         <Route path="/admin/login" element={<AdminLogin />} />
         <Route path="/auth/forgot-password" element={<ForgotPassword />} />

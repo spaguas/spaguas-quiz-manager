@@ -13,6 +13,21 @@ export async function createTestServer() {
   process.env.JWT_SECRET = process.env.JWT_SECRET || 'test-secret';
   process.env.JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '1h';
   process.env.PASSWORD_RESET_TOKEN_EXPIRY_MINUTES = process.env.PASSWORD_RESET_TOKEN_EXPIRY_MINUTES || '60';
+  process.env.SMTP_HOST = process.env.SMTP_HOST || 'smtp.test';
+  process.env.SMTP_PORT = process.env.SMTP_PORT || '587';
+  process.env.SMTP_USER = process.env.SMTP_USER || 'user@test';
+  process.env.SMTP_PASSWORD = process.env.SMTP_PASSWORD || 'pwd';
+  process.env.SMTP_FROM = process.env.SMTP_FROM || 'Spaguas Quiz <no-reply@test>'; 
+  process.env.APP_URL = process.env.APP_URL || 'http://localhost:5173';
+
+  const sendMailMock = vi.fn().mockResolvedValue(true);
+
+  vi.mock('nodemailer', () => ({
+    default: {
+      createTransport: vi.fn(() => ({ sendMail: sendMailMock })),
+    },
+    createTransport: vi.fn(() => ({ sendMail: sendMailMock })),
+  }));
 
   const db = newDb({ autoCreateForeignKeyIndices: true });
   db.public.registerFunction({ name: 'current_database', returns: 'text', implementation: () => 'test' });

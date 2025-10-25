@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext.jsx';
 
 const ProfilePage = () => {
-  const { user, updateProfile, changePassword, fetchProfile } = useAuth();
+  const { user, updateProfile, changePassword, fetchProfile, getGamification } = useAuth();
   const [profileForm, setProfileForm] = useState({ name: '', email: '' });
   const [profileLoading, setProfileLoading] = useState(false);
   const [profileMessage, setProfileMessage] = useState('');
@@ -12,6 +12,8 @@ const ProfilePage = () => {
   const [passwordLoading, setPasswordLoading] = useState(false);
   const [passwordMessage, setPasswordMessage] = useState('');
   const [passwordError, setPasswordError] = useState('');
+  const [gamification, setGamification] = useState(null);
+  const [gamificationError, setGamificationError] = useState('');
 
   useEffect(() => {
     if (user) {
@@ -22,6 +24,19 @@ const ProfilePage = () => {
   useEffect(() => {
     fetchProfile().catch(() => {});
   }, [fetchProfile]);
+
+  useEffect(() => {
+    const loadGamification = async () => {
+      try {
+        const data = await getGamification();
+        setGamification(data);
+      } catch (err) {
+        setGamificationError(err.response?.data?.message || 'Não foi possível carregar a gamificação.');
+      }
+    };
+
+    loadGamification();
+  }, [getGamification]);
 
   const handleProfileChange = (event) => {
     const { name, value } = event.target;
@@ -108,6 +123,54 @@ const ProfilePage = () => {
             Gerencie suas informações pessoais e altere sua senha de acesso ao sistema.
           </p>
         </div>
+      </div>
+
+      <div className="card">
+        <h2>Gamificação</h2>
+        {gamificationError && <div className="page-error" style={{ margin: 0 }}>{gamificationError}</div>}
+        {gamification ? (
+          <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem' }}>
+            <div className="gamification-card">
+              <span className="gamification-icon">⭐</span>
+              <strong>{gamification.stats.points}</strong>
+              <span>Pontos</span>
+            </div>
+            <div className="gamification-card">
+              <span className="gamification-icon">🔥</span>
+              <strong>Nível {gamification.stats.level}</strong>
+              <span>{gamification.stats.experience}/{gamification.stats.nextLevelAt} XP</span>
+            </div>
+            <div className="gamification-card">
+              <span className="gamification-icon">🎯</span>
+              <strong>{gamification.stats.totalQuizzes}</strong>
+              <span>Quizzes concluídos</span>
+            </div>
+            <div className="gamification-card">
+              <span className="gamification-icon">✅</span>
+              <strong>{gamification.stats.totalCorrect}</strong>
+              <span>Acertos acumulados</span>
+            </div>
+          </div>
+        ) : (
+          !gamificationError && <div className="page-loading">Carregando gamificação...</div>
+        )}
+        {gamification?.badges?.length ? (
+          <div style={{ marginTop: '1.5rem' }}>
+            <h3>Conquistas</h3>
+            <div className="badge-list">
+              {gamification.badges.map((badge) => (
+                <div key={badge.id} className="badge-item">
+                  <span className="badge-icon" role="img" aria-label={badge.name}>{badge.icon}</span>
+                  <div>
+                    <strong>{badge.name}</strong>
+                    <p>{badge.description}</p>
+                    <small>Conquistado em {new Date(badge.awardedAt).toLocaleDateString()}</small>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
       </div>
 
       <form className="card form-grid" onSubmit={handleProfileSubmit}>

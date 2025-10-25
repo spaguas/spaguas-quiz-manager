@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import quizRouter from './routes/quizRoutes.js';
 import authRouter from './routes/authRoutes.js';
 import userRouter from './routes/userRoutes.js';
+import gamificationRouter from './routes/gamificationRoutes.js';
 import errorHandler from './middlewares/errorHandler.js';
 
 const app = express();
@@ -17,6 +18,7 @@ app.use(morgan('dev'));
 
 app.use('/api/auth', authRouter);
 app.use('/api/admin/users', userRouter);
+app.use('/api/gamification', gamificationRouter);
 app.use('/api', quizRouter);
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));

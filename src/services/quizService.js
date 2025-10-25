@@ -1,5 +1,6 @@
 import prisma from '../config/prisma.js';
 import HttpError from '../utils/httpError.js';
+import { registerSubmission } from './gamificationService.js';
 
 export async function createQuiz({ title, description, isActive = true }) {
   return prisma.quiz.create({
@@ -283,10 +284,23 @@ export async function createSubmission({ quizId, userName, userEmail, answers },
   const correctAnswers = evaluation.filter((item) => item.isCorrect).length;
   const percentage = totalQuestions === 0 ? 0 : Number(((correctAnswers / totalQuestions) * 100).toFixed(2));
 
+  let submissionUserId = actor?.id ? Number(actor.id) : null;
+
+  if (!submissionUserId) {
+    const existingUser = await prisma.user.findUnique({
+      where: { email: normalizedEmail },
+      select: { id: true },
+    });
+
+    if (existingUser) {
+      submissionUserId = existingUser.id;
+    }
+  }
+
   const submission = await prisma.submission.create({
     data: {
       quizId,
-      userId: actor?.id ? Number(actor.id) : null,
+      userId: submissionUserId,
       userName: userName || actor?.name || 'Participante',
       userEmail: normalizedEmail,
       score: correctAnswers,
@@ -310,6 +324,15 @@ export async function createSubmission({ quizId, userName, userEmail, answers },
       ],
     },
   });
+
+  if (submissionUserId) {
+    await registerSubmission({
+      userId: submissionUserId,
+      score: submission.score,
+      total: submission.total,
+      percentage: submission.percentage,
+    });
+  }
 
   return {
     submissionId: submission.id,

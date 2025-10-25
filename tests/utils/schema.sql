@@ -79,3 +79,53 @@ CREATE TABLE "PasswordResetToken" (
 );
 
 CREATE INDEX "PasswordResetToken_userId_idx" ON "PasswordResetToken"("userId");
+
+CREATE TABLE "UserGamification" (
+  "id" SERIAL PRIMARY KEY,
+  "userId" INTEGER NOT NULL UNIQUE,
+  "points" INTEGER NOT NULL DEFAULT 0,
+  "level" INTEGER NOT NULL DEFAULT 1,
+  "experience" INTEGER NOT NULL DEFAULT 0,
+  "nextLevelAt" INTEGER NOT NULL DEFAULT 100,
+  "totalQuizzes" INTEGER NOT NULL DEFAULT 0,
+  "totalCorrect" INTEGER NOT NULL DEFAULT 0,
+  "totalIncorrect" INTEGER NOT NULL DEFAULT 0,
+  "bestStreak" INTEGER NOT NULL DEFAULT 0,
+  "currentStreak" INTEGER NOT NULL DEFAULT 0,
+  "lastSubmissionAt" TIMESTAMP,
+  "createdAt" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updatedAt" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT "UserGamification_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE
+);
+
+CREATE TABLE "Badge" (
+  "id" SERIAL PRIMARY KEY,
+  "code" TEXT NOT NULL UNIQUE,
+  "name" TEXT NOT NULL,
+  "description" TEXT NOT NULL,
+  "icon" TEXT NOT NULL,
+  "createdAt" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updatedAt" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE "UserBadge" (
+  "id" SERIAL PRIMARY KEY,
+  "userId" INTEGER NOT NULL,
+  "badgeId" INTEGER NOT NULL,
+  "awardedAt" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT "UserBadge_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE,
+  CONSTRAINT "UserBadge_badgeId_fkey" FOREIGN KEY ("badgeId") REFERENCES "Badge"("id") ON DELETE CASCADE,
+  CONSTRAINT "UserBadge_userId_badgeId_key" UNIQUE ("userId", "badgeId")
+);
+
+CREATE TABLE "GamificationEvent" (
+  "id" SERIAL PRIMARY KEY,
+  "userId" INTEGER NOT NULL,
+  "type" TEXT NOT NULL,
+  "points" INTEGER NOT NULL,
+  "description" TEXT NOT NULL,
+  "createdAt" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT "GamificationEvent_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE
+);
+
+CREATE INDEX "GamificationEvent_userId_idx" ON "GamificationEvent"("userId");

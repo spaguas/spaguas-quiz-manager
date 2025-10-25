@@ -10,6 +10,7 @@ Sistema de Quiz completo construído com Node.js, Express, Prisma, PostgreSQL e 
 - Autenticação JWT com perfis de usuário (admin/participante) e controle de acesso.
 - Dashboard administrativo com ranking geral, top quizzes, top participantes e atividade recente.
 - Interface web para administração (cadastro e manutenção) e para os participantes responderem aos quizzes.
+- Gamificação com pontuação, níveis, conquistas, medalhas e ranking global.
 
 ## Pré-requisitos
 - Node.js 18+
@@ -89,7 +90,7 @@ O servidor será iniciado em `http://localhost:3000` (ajuste a porta via variáv
   npm run create:admin -- --name "Admin" --email "admin@exemplo.com" --password "senha"
   ```
 - Usuários autenticados podem atualizar seus dados e alterar a senha em `/account/profile`. Caso esqueçam a senha, utilizam `/auth/forgot-password` para gerar um token e `/auth/reset-password` para defini-la novamente.
-- Configure as credenciais SMTP no `.env` (`SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM`, `APP_URL`) para que os e-mails de recuperação sejam enviados automaticamente.
+- Configure as credenciais SMTP no `.env` (`SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM`, `APP_URL`) para que os e-mails de recuperação sejam enviados automaticamente. Ajuste também os badges padrões utilizando a tabela `Badge` caso deseje novas conquistas personalizadas.
 
 ## Estrutura do banco
 O schema Prisma (`prisma/schema.prisma`) define as seguintes tabelas principais:
@@ -168,7 +169,11 @@ Todos os endpoints estão disponíveis sob o prefixo `/api`.
 - Cada e-mail só pode participar uma única vez por quiz; em caso de duplicidade o serviço retorna `409`.
 - `GET /api/quizzes/:quizId/ranking` – lista top 10 do ranking.
 
+### Gamificação
+- `GET /api/gamification/profile` – retorna pontos, nível, conquistas e eventos do usuário autenticado.
+- `GET /api/gamification/leaderboard` – ranking global ordenado por pontuação.
+
 ## Próximos Passos Sugeridos
-- Implementar fluxo de atualização de perfil e recuperação de senha para usuários.
-- Adicionar testes automatizados de integração para as APIs críticas.
+- Integrar serviço de e-mail em produção para envio real dos tokens de recuperação.
+- Configurar monitoramento e analytics das métricas de gamificação.
 - Publicar a aplicação em produção (containerização, pipelines, etc.).

@@ -1,0 +1,41 @@
+{
+  "name": "spaguas_quiz",
+  "version": "1.0.0",
+  "description": "Sistema de Quiz com Node.js, Express e PostgreSQL",
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "dev": "node scripts/dev.js",
+    "dev:api": "nodemon src/server.js",
+    "start": "node src/server.js",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:generate": "prisma generate",
+    "prisma:deploy": "prisma migrate deploy",
+    "client:dev": "npm --prefix client run dev",
+    "client:build": "npm --prefix client run build",
+    "client:preview": "npm --prefix client run preview",
+    "create:admin": "node scripts/createAdmin.js"
+  },
+  "keywords": [
+    "quiz",
+    "nodejs",
+    "express",
+    "postgresql"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@prisma/client": "^5.15.0",
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "jsonwebtoken": "^9.0.2",
+    "morgan": "^1.10.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.3",
+    "prisma": "^5.15.0"
+  }
+}

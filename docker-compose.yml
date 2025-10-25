@@ -1,0 +1,22 @@
+version: "3.9"
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: spaguas-quiz-app
+    container_name: spaguas-quiz-app
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: ${DATABASE_URL}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-2d}
+      PORT: ${PORT:-3000}
+      SERVE_CLIENT: ${SERVE_CLIENT:-true}
+    ports:
+      - "${PORT:-3000}:3000"
+    command: ["npm", "start"]

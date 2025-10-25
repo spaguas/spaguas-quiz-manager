@@ -1,0 +1,40 @@
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import Layout from './components/Layout.jsx';
+import RequireAdmin from './components/RequireAdmin.jsx';
+import AdminDashboard from './pages/AdminDashboard.jsx';
+import AdminLogin from './pages/AdminLogin.jsx';
+import AdminQuizForm from './pages/AdminQuizForm.jsx';
+import AdminQuizList from './pages/AdminQuizList.jsx';
+import AdminQuestionManager from './pages/AdminQuestionManager.jsx';
+import AdminUserManagement from './pages/AdminUserManagement.jsx';
+import PlayerQuizList from './pages/PlayerQuizList.jsx';
+import PlayerQuizPlay from './pages/PlayerQuizPlay.jsx';
+import PlayerRanking from './pages/PlayerRanking.jsx';
+
+const App = () => (
+  <BrowserRouter>
+    <Routes>
+      <Route element={<Layout />}>
+        <Route path="/" element={<Navigate to="/play" replace />} />
+        <Route path="/play" element={<PlayerQuizList />} />
+        <Route path="/play/quiz/:quizId" element={<PlayerQuizPlay />} />
+        <Route path="/play/quiz/:quizId/ranking" element={<PlayerRanking />} />
+
+        <Route path="/admin/login" element={<AdminLogin />} />
+
+        <Route element={<RequireAdmin />}>
+          <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
+          <Route path="/admin/dashboard" element={<AdminDashboard />} />
+          <Route path="/admin/quizzes" element={<AdminQuizList />} />
+          <Route path="/admin/quizzes/new" element={<AdminQuizForm />} />
+          <Route path="/admin/quizzes/:quizId/questions" element={<AdminQuestionManager />} />
+          <Route path="/admin/users" element={<AdminUserManagement />} />
+        </Route>
+
+        <Route path="*" element={<Navigate to="/play" replace />} />
+      </Route>
+    </Routes>
+  </BrowserRouter>
+);
+
+export default App;

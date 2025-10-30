@@ -22,7 +22,8 @@ FROM node:20-alpine AS runner
 ENV NODE_ENV=production
 WORKDIR /app
 
-RUN addgroup -S nodeapp && adduser -S nodeapp -G nodeapp
+RUN apk add --no-cache openssl \
+  && addgroup -S nodeapp && adduser -S nodeapp -G nodeapp
 
 COPY --from=backend-deps /app/node_modules ./node_modules
 COPY package.json package-lock.json ./
@@ -32,9 +33,10 @@ COPY scripts ./scripts
 COPY --from=frontend-build /app/client/dist ./client/dist
 
 RUN npx prisma generate
+RUN chown -R nodeapp:nodeapp /app
 
-ENV PORT=3000
-EXPOSE 3000
+ENV PORT=4000
+EXPOSE 4000
 
 USER nodeapp
 

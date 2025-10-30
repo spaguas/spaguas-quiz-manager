@@ -15,8 +15,8 @@ services:
       DATABASE_URL: ${DATABASE_URL}
       JWT_SECRET: ${JWT_SECRET}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-2d}
-      PORT: ${PORT:-3000}
+      PORT: ${PORT:-4000}
       SERVE_CLIENT: ${SERVE_CLIENT:-true}
     ports:
-      - "${PORT:-3000}:3000"
+      - "${PORT:-4000}:4000"
     command: ["npm", "start"]

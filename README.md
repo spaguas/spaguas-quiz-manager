@@ -33,7 +33,7 @@ Sistema de Quiz completo construído com Node.js, Express, Prisma, PostgreSQL e 
    npm run dev
    ```
 
-O servidor será iniciado em `http://localhost:3000` (ajuste a porta via variável `PORT`).
+O servidor será iniciado em `http://localhost:4000` (ajuste a porta via variável `PORT`).
 
 ## Configuração da interface web
 1. Acesse a pasta `client` e duplique `.env.example` para `.env`, configurando `VITE_API_URL` se necessário.
@@ -46,7 +46,7 @@ O servidor será iniciado em `http://localhost:3000` (ajuste a porta via variáv
    ```bash
    npm run dev
    ```
-4. A aplicação estará disponível em `http://localhost:5173` consumindo o backend em `http://localhost:3000/api`.
+4. A aplicação estará disponível em `http://localhost:5173` consumindo o backend em `http://localhost:4000/api`.
 
 ## Execução com Docker (banco externo)
 1. Garanta que o arquivo `.env` contém os dados de conexão para o banco externo acessível a partir do container (por exemplo, use o IP/hostname público do servidor e não `localhost`).
@@ -63,7 +63,7 @@ O servidor será iniciado em `http://localhost:3000` (ajuste a porta via variáv
    ```bash
    docker compose up -d
    ```
-6. A API (e a SPA embarcada) ficarão disponíveis em `http://localhost:${PORT:-3000}`.
+6. A API (e a SPA embarcada) ficarão disponíveis em `http://localhost:${PORT:-4000}`.
 
 > Observação: o `docker-compose.yml` não provisiona um banco local, permitindo conectar-se diretamente ao servidor PostgreSQL de produção ou staging informado via `DATABASE_URL`.
 

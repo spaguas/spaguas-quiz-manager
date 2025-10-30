@@ -27,7 +27,7 @@ export async function sendPasswordResetEmail({ email, token }) {
   const transporter = createTransporter();
 
   const from = process.env.SMTP_FROM || SMTP_USER || 'no-reply@spaguas.quiz';
-  const appUrl = process.env.APP_URL || 'http://localhost:3000';
+  const appUrl = process.env.APP_URL || 'http://localhost:4000';
 
   const resetUrl = `${appUrl}/auth/reset-password?token=${encodeURIComponent(token)}`;
 

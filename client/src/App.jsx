@@ -16,8 +16,22 @@ import PlayerQuizPlay from './pages/PlayerQuizPlay.jsx';
 import PlayerRanking from './pages/PlayerRanking.jsx';
 import Leaderboard from './pages/Leaderboard.jsx';
 
+const sanitizeBasePath = (value) => {
+  if (!value) {
+    return '';
+  }
+  const trimmed = value.trim();
+  if (!trimmed || trimmed === '/') {
+    return '';
+  }
+  const withLeading = trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
+  return withLeading.replace(/\/+$/, '');
+};
+
+const basePath = sanitizeBasePath(import.meta.env.VITE_BASE_PATH);
+
 const App = () => (
-  <BrowserRouter>
+  <BrowserRouter basename={basePath}>
     <Routes>
       <Route element={<Layout />}>
         <Route path="/" element={<Navigate to="/play" replace />} />

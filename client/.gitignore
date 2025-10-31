@@ -142,4 +142,3 @@ vite.config.ts.timestamp-*
 .env
 
 client/.env
-uploads/

@@ -1,18 +1,61 @@
+import path from 'node:path';
+import fs from 'node:fs';
 import prisma from '../config/prisma.js';
 import HttpError from '../utils/httpError.js';
+import appConfig from '../config/appConfig.js';
 import { registerSubmission } from './gamificationService.js';
 
-export async function createQuiz({ title, description, isActive = true }) {
+const uploadsRoot = path.resolve(process.cwd(), 'uploads');
+
+const toRelativePath = (filePath) => path.relative(uploadsRoot, filePath).replace(/\\/g, '/');
+
+const buildPublicUrl = (relativePath) => {
+  if (!relativePath) {
+    return null;
+  }
+
+  const pathWithBase = `${appConfig.basePath || ''}/uploads/${relativePath.replace(/\\/g, '/')}`.replace(/\/{2,}/g, '/');
+
+  if (appConfig.publicUrl) {
+    return `${appConfig.publicUrl}${pathWithBase.startsWith('/') ? pathWithBase : `/${pathWithBase}`}`;
+  }
+
+  return pathWithBase.startsWith('/') ? pathWithBase : `/${pathWithBase}`;
+};
+
+const deleteFileIfExists = (relativePath) => {
+  if (!relativePath) {
+    return;
+  }
+  const absolutePath = path.join(uploadsRoot, relativePath);
+  if (fs.existsSync(absolutePath)) {
+    fs.unlinkSync(absolutePath);
+  }
+};
+
+export async function createQuiz({
+  title,
+  description,
+  isActive = true,
+  mode = 'SEQUENTIAL',
+  questionLimit = null,
+}) {
+  const normalizedLimit = questionLimit ?? null;
+
   return prisma.quiz.create({
     data: {
       title,
       description,
       isActive,
+      mode,
+      questionLimit: normalizedLimit,
+      backgroundImage: null,
+      headerImage: null,
     },
   });
 }
 
-export async function updateQuiz(quizId, { title, description, isActive }) {
+export async function updateQuiz(quizId, { title, description, isActive, mode, questionLimit }) {
   const quiz = await prisma.quiz.findUnique({
     where: { id: quizId },
     select: { id: true },
@@ -22,20 +65,58 @@ export async function updateQuiz(quizId, { title, description, isActive }) {
     throw new HttpError(404, 'Quiz não encontrado');
   }
 
-  return prisma.quiz.update({
+  await prisma.quiz.update({
     where: { id: quizId },
     data: {
       ...(title !== undefined ? { title } : {}),
       ...(description !== undefined ? { description } : {}),
       ...(isActive !== undefined ? { isActive } : {}),
-    },
-    include: {
-      questions: {
-        include: { options: true },
-        orderBy: { order: 'asc' },
-      },
+      ...(mode !== undefined ? { mode } : {}),
+      ...(questionLimit !== undefined ? { questionLimit: questionLimit ?? null } : {}),
     },
   });
+
+  return getQuizByIdForAdmin(quizId);
+}
+
+export async function updateQuizMedia(quizId, { backgroundImage, headerImage }) {
+  const quiz = await prisma.quiz.findUnique({
+    where: { id: quizId },
+    select: {
+      id: true,
+      backgroundImage: true,
+      headerImage: true,
+    },
+  });
+
+  if (!quiz) {
+    throw new HttpError(404, 'Quiz não encontrado');
+  }
+
+  const data = {};
+
+  if (backgroundImage) {
+    const relativePath = toRelativePath(backgroundImage.path);
+    deleteFileIfExists(quiz.backgroundImage);
+    data.backgroundImage = relativePath;
+  }
+
+  if (headerImage) {
+    const relativePath = toRelativePath(headerImage.path);
+    deleteFileIfExists(quiz.headerImage);
+    data.headerImage = relativePath;
+  }
+
+  if (Object.keys(data).length === 0) {
+    return getQuizByIdForAdmin(quizId);
+  }
+
+  await prisma.quiz.update({
+    where: { id: quizId },
+    data,
+  });
+
+  return getQuizByIdForAdmin(quizId);
 }
 
 export async function addQuestionToQuiz({ quizId, text, order, options }) {
@@ -92,6 +173,10 @@ export async function listActiveQuizzes() {
       title: true,
       description: true,
       createdAt: true,
+      mode: true,
+      questionLimit: true,
+      backgroundImage: true,
+      headerImage: true,
       _count: {
         select: {
           questions: true,
@@ -106,8 +191,15 @@ export async function listActiveQuizzes() {
     title: quiz.title,
     description: quiz.description,
     createdAt: quiz.createdAt,
-    questionCount: quiz._count.questions,
+    mode: quiz.mode,
+    questionLimit: quiz.questionLimit,
+    questionCount: Math.min(
+      quiz._count.questions,
+      quiz.questionLimit ?? quiz._count.questions,
+    ),
     submissionCount: quiz._count.submissions,
+    backgroundImageUrl: buildPublicUrl(quiz.backgroundImage),
+    headerImageUrl: buildPublicUrl(quiz.headerImage),
   }));
 }
 
@@ -149,8 +241,30 @@ export async function deleteQuestion(quizId, questionId) {
   return { message: 'Pergunta removida com sucesso' };
 }
 
+export async function deleteQuiz(quizId) {
+  const quiz = await prisma.quiz.findUnique({
+    where: { id: quizId },
+    select: { id: true },
+  });
+
+  if (!quiz) {
+    throw new HttpError(404, 'Quiz não encontrado');
+  }
+
+  await prisma.quiz.delete({
+    where: { id: quizId },
+  });
+
+  const quizDirectory = path.join(uploadsRoot, 'quizzes', String(quizId));
+  if (fs.existsSync(quizDirectory)) {
+    fs.rmSync(quizDirectory, { recursive: true, force: true });
+  }
+
+  return { message: 'Quiz removido com sucesso' };
+}
+
 export async function getQuizByIdForAdmin(quizId) {
-  return prisma.quiz.findUnique({
+  const quiz = await prisma.quiz.findUnique({
     where: { id: quizId },
     include: {
       questions: {
@@ -163,6 +277,16 @@ export async function getQuizByIdForAdmin(quizId) {
       },
     },
   });
+
+  if (!quiz) {
+    return null;
+  }
+
+  return {
+    ...quiz,
+    backgroundImageUrl: buildPublicUrl(quiz.backgroundImage),
+    headerImageUrl: buildPublicUrl(quiz.headerImage),
+  };
 }
 
 export async function getQuizForPlay(quizId) {
@@ -193,11 +317,38 @@ export async function getQuizForPlay(quizId) {
     throw new HttpError(409, 'Quiz não possui perguntas disponíveis no momento');
   }
 
+  const shuffleQuestions = (items) => {
+    const array = [...items];
+    for (let index = array.length - 1; index > 0; index -= 1) {
+      const swapIndex = Math.floor(Math.random() * (index + 1));
+      [array[index], array[swapIndex]] = [array[swapIndex], array[index]];
+    }
+    return array;
+  };
+
+  let selectedQuestions = quiz.questions;
+
+  if (quiz.mode === 'RANDOM') {
+    selectedQuestions = shuffleQuestions(selectedQuestions);
+  }
+
+  const limit = quiz.questionLimit ?? selectedQuestions.length;
+  const effectiveLimit = Math.min(limit, selectedQuestions.length);
+  const limitedQuestions = selectedQuestions.slice(0, effectiveLimit);
+
+  if (quiz.mode === 'SEQUENTIAL') {
+    limitedQuestions.sort((a, b) => a.order - b.order);
+  }
+
   return {
     id: quiz.id,
     title: quiz.title,
     description: quiz.description,
-    questions: quiz.questions.map((question) => ({
+    mode: quiz.mode,
+    questionLimit: quiz.questionLimit,
+    backgroundImageUrl: buildPublicUrl(quiz.backgroundImage),
+    headerImageUrl: buildPublicUrl(quiz.headerImage),
+    questions: limitedQuestions.map((question) => ({
       id: question.id,
       text: question.text,
       order: question.order,
@@ -206,6 +357,43 @@ export async function getQuizForPlay(quizId) {
         text: option.text,
       })),
     })),
+  };
+}
+
+export async function validateQuestionAnswer({ quizId, questionId, optionId }) {
+  const question = await prisma.question.findFirst({
+    where: {
+      id: questionId,
+      quizId,
+      quiz: {
+        isActive: true,
+      },
+    },
+    select: {
+      id: true,
+      options: {
+        select: {
+          id: true,
+          isCorrect: true,
+        },
+      },
+    },
+  });
+
+  if (!question) {
+    throw new HttpError(404, 'Pergunta não encontrada para este quiz');
+  }
+
+  const option = question.options.find((item) => item.id === optionId);
+
+  if (!option) {
+    throw new HttpError(400, 'Alternativa inválida para esta pergunta');
+  }
+
+  return {
+    questionId,
+    optionId,
+    isCorrect: option.isCorrect,
   };
 }
 
@@ -276,13 +464,19 @@ export async function createSubmission({ quizId, userName, userEmail, answers },
     };
   });
 
-  const totalQuestions = quiz.questions.length;
-  if (totalQuestions > 0 && evaluation.length !== totalQuestions) {
+  const totalAvailableQuestions = quiz.questions.length;
+  const expectedQuestions = Math.min(
+    quiz.questionLimit ?? totalAvailableQuestions,
+    totalAvailableQuestions,
+  );
+
+  if (expectedQuestions > 0 && evaluation.length !== expectedQuestions) {
     throw new HttpError(400, 'Responda todas as perguntas do quiz');
   }
 
   const correctAnswers = evaluation.filter((item) => item.isCorrect).length;
-  const percentage = totalQuestions === 0 ? 0 : Number(((correctAnswers / totalQuestions) * 100).toFixed(2));
+  const percentage =
+    expectedQuestions === 0 ? 0 : Number(((correctAnswers / expectedQuestions) * 100).toFixed(2));
 
   let submissionUserId = actor?.id ? Number(actor.id) : null;
 
@@ -304,7 +498,7 @@ export async function createSubmission({ quizId, userName, userEmail, answers },
       userName: userName || actor?.name || 'Participante',
       userEmail: normalizedEmail,
       score: correctAnswers,
-      total: totalQuestions,
+      total: expectedQuestions,
       percentage,
       answers: {
         create: evaluation,

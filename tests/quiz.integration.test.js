@@ -128,4 +128,108 @@ describe('Quiz API integration', () => {
 
     expect(rankingAfterClear.body.ranking).toHaveLength(0);
   });
+
+  it('limits questions when quiz is random with a maximum defined', async () => {
+    const registerRes = await request(app)
+      .post('/api/auth/register')
+      .send({
+        name: 'Admin User',
+        email: 'admin-random@example.com',
+        password: 'Secret123',
+      })
+      .expect(201);
+
+    const adminToken = registerRes.body.token;
+    const authHeader = { Authorization: `Bearer ${adminToken}` };
+
+    const createQuizRes = await request(app)
+      .post('/api/admin/quizzes')
+      .set(authHeader)
+      .send({
+        title: 'Quiz Aleatório',
+        description: 'Quiz com limite de perguntas.',
+        isActive: true,
+        mode: 'RANDOM',
+        questionLimit: 2,
+      })
+      .expect(201);
+
+    const quizId = createQuizRes.body.id;
+    const questionRegistry = new Map();
+
+    const questions = [
+      {
+        text: 'Pergunta 1',
+        options: [
+          { text: 'Opção A', isCorrect: true },
+          { text: 'Opção B', isCorrect: false },
+        ],
+      },
+      {
+        text: 'Pergunta 2',
+        options: [
+          { text: 'Opção C', isCorrect: true },
+          { text: 'Opção D', isCorrect: false },
+        ],
+      },
+      {
+        text: 'Pergunta 3',
+        options: [
+          { text: 'Opção E', isCorrect: true },
+          { text: 'Opção F', isCorrect: false },
+        ],
+      },
+    ];
+
+    for (let index = 0; index < questions.length; index += 1) {
+      const questionPayload = questions[index];
+      const questionRes = await request(app)
+        .post(`/api/admin/quizzes/${quizId}/questions`)
+        .set(authHeader)
+        .send({
+          text: questionPayload.text,
+          order: index + 1,
+          options: questionPayload.options,
+        })
+        .expect(201);
+
+      const correctOption = questionRes.body.options.find((option) => option.isCorrect === true);
+      questionRegistry.set(questionRes.body.id, correctOption.id);
+    }
+
+    const playRes = await request(app)
+      .get(`/api/quizzes/${quizId}`)
+      .expect(200);
+
+    expect(playRes.body.questions).toHaveLength(2);
+
+    const answers = playRes.body.questions.map((question) => {
+      const correctOptionId = questionRegistry.get(question.id);
+      expect(correctOptionId).toBeDefined();
+      return {
+        questionId: question.id,
+        optionId: correctOptionId,
+      };
+    });
+
+    const submissionRes = await request(app)
+      .post(`/api/quizzes/${quizId}/submissions`)
+      .send({
+        userName: 'Participante Random',
+        userEmail: 'random-participant@example.com',
+        answers,
+      })
+      .expect(201);
+
+    expect(submissionRes.body.total).toBe(2);
+
+    await request(app)
+      .post(`/api/quizzes/${quizId}/submissions`)
+      .send({
+        userName: 'Participante Incompleto',
+        userEmail: 'random-participant-2@example.com',
+        answers: answers.slice(0, 1),
+      })
+      .expect(400);
+  });
 });

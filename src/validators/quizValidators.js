@@ -1,17 +1,30 @@
 import { z } from 'zod';
 
+const quizModeSchema = z.enum(['SEQUENTIAL', 'RANDOM']);
+
+const questionLimitSchema = z.number().int().min(1, 'Informe uma quantidade de perguntas maior que zero').nullable();
+
 export const quizCreateSchema = z.object({
   title: z.string().min(3, 'Título deve ter ao menos 3 caracteres'),
   description: z.string().min(5, 'Descrição deve ter ao menos 5 caracteres'),
   isActive: z.boolean().optional().default(true),
+  mode: quizModeSchema.default('SEQUENTIAL'),
+  questionLimit: questionLimitSchema.optional(),
 });
 
 export const quizUpdateSchema = z.object({
   title: z.string().min(3, 'Título deve ter ao menos 3 caracteres').optional(),
   description: z.string().min(5, 'Descrição deve ter ao menos 5 caracteres').optional(),
   isActive: z.boolean().optional(),
+  mode: quizModeSchema.optional(),
+  questionLimit: questionLimitSchema.optional(),
 }).refine(
-  (data) => data.title !== undefined || data.description !== undefined || data.isActive !== undefined,
+  (data) =>
+    data.title !== undefined ||
+    data.description !== undefined ||
+    data.isActive !== undefined ||
+    data.mode !== undefined ||
+    data.questionLimit !== undefined,
   { message: 'Informe ao menos um campo para atualizar', path: ['_root'] },
 );
 
@@ -40,4 +53,10 @@ export const submissionSchema = z.object({
       optionId: z.number().int().positive(),
     }),
   ).min(1, 'Informe ao menos uma resposta'),
+});
+
+export const answerValidationSchema = z.object({
+  quizId: z.number().int().positive(),
+  questionId: z.number().int().positive(),
+  optionId: z.number().int().positive(),
 });

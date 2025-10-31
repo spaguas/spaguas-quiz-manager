@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import api from '../services/api.js';
 
@@ -23,10 +23,84 @@ const AdminQuestionManager = () => {
   const [form, setForm] = useState(createEmptyForm(1));
   const [deletingQuestionId, setDeletingQuestionId] = useState(null);
   const [clearingRanking, setClearingRanking] = useState(false);
-  const [quizDetails, setQuizDetails] = useState({ title: '', description: '' });
+  const [quizDetails, setQuizDetails] = useState({
+    title: '',
+    description: '',
+    mode: 'SEQUENTIAL',
+    questionUsage: 'ALL',
+    questionLimit: '',
+  });
   const [updatingQuiz, setUpdatingQuiz] = useState(false);
   const [quizError, setQuizError] = useState('');
   const [quizFeedback, setQuizFeedback] = useState('');
+  const [backgroundFile, setBackgroundFile] = useState(null);
+  const [headerFile, setHeaderFile] = useState(null);
+  const [backgroundPreview, setBackgroundPreview] = useState('');
+  const [headerPreview, setHeaderPreview] = useState('');
+  const backgroundObjectUrlRef = useRef(null);
+  const headerObjectUrlRef = useRef(null);
+  const backgroundInputRef = useRef(null);
+  const headerInputRef = useRef(null);
+
+  const setBackgroundPreviewFromServer = (url) => {
+    if (backgroundObjectUrlRef.current) {
+      URL.revokeObjectURL(backgroundObjectUrlRef.current);
+      backgroundObjectUrlRef.current = null;
+    }
+    setBackgroundPreview(url || '');
+  };
+
+  const setHeaderPreviewFromServer = (url) => {
+    if (headerObjectUrlRef.current) {
+      URL.revokeObjectURL(headerObjectUrlRef.current);
+      headerObjectUrlRef.current = null;
+    }
+    setHeaderPreview(url || '');
+  };
+
+  const setBackgroundPreviewFromFile = (file) => {
+    if (backgroundObjectUrlRef.current) {
+      URL.revokeObjectURL(backgroundObjectUrlRef.current);
+      backgroundObjectUrlRef.current = null;
+    }
+
+    if (!file) {
+      setBackgroundPreview('');
+      return;
+    }
+
+    const objectUrl = URL.createObjectURL(file);
+    backgroundObjectUrlRef.current = objectUrl;
+    setBackgroundPreview(objectUrl);
+  };
+
+  const setHeaderPreviewFromFile = (file) => {
+    if (headerObjectUrlRef.current) {
+      URL.revokeObjectURL(headerObjectUrlRef.current);
+      headerObjectUrlRef.current = null;
+    }
+
+    if (!file) {
+      setHeaderPreview('');
+      return;
+    }
+
+    const objectUrl = URL.createObjectURL(file);
+    headerObjectUrlRef.current = objectUrl;
+    setHeaderPreview(objectUrl);
+  };
+
+  useEffect(
+    () => () => {
+      if (backgroundObjectUrlRef.current) {
+        URL.revokeObjectURL(backgroundObjectUrlRef.current);
+      }
+      if (headerObjectUrlRef.current) {
+        URL.revokeObjectURL(headerObjectUrlRef.current);
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
     const fetchQuiz = async () => {
@@ -51,10 +125,24 @@ const AdminQuestionManager = () => {
 
   useEffect(() => {
     if (quiz) {
+      const hasLimit = quiz.questionLimit !== null && quiz.questionLimit !== undefined;
       setQuizDetails({
         title: quiz.title ?? '',
         description: quiz.description ?? '',
+        mode: quiz.mode ?? 'SEQUENTIAL',
+        questionUsage: hasLimit ? 'LIMITED' : 'ALL',
+        questionLimit: hasLimit ? String(quiz.questionLimit) : '',
       });
+      setBackgroundFile(null);
+      setHeaderFile(null);
+      setBackgroundPreviewFromServer(quiz.backgroundImageUrl ?? '');
+      setHeaderPreviewFromServer(quiz.headerImageUrl ?? '');
+      if (backgroundInputRef.current) {
+        backgroundInputRef.current.value = '';
+      }
+      if (headerInputRef.current) {
+        headerInputRef.current.value = '';
+      }
     }
   }, [quiz]);
 
@@ -71,6 +159,92 @@ const AdminQuestionManager = () => {
       ...prev,
       [field]: value,
     }));
+  };
+
+  const handleQuizModeChange = (event) => {
+    const { value } = event.target;
+    setQuizDetails((prev) => ({
+      ...prev,
+      mode: value,
+    }));
+  };
+
+  const handleQuestionUsageChange = (event) => {
+    const { value } = event.target;
+    setQuizDetails((prev) => ({
+      ...prev,
+      questionUsage: value,
+      questionLimit: value === 'ALL' ? '' : prev.questionLimit,
+    }));
+  };
+
+  const handleQuestionLimitChange = (event) => {
+    const { value } = event.target;
+    setQuizDetails((prev) => ({
+      ...prev,
+      questionLimit: value,
+    }));
+  };
+
+  const MAX_IMAGE_SIZE = 10 * 1024 * 1024;
+
+  const validateImageFile = (file) => {
+    if (!file) {
+      return null;
+    }
+    if (file.type !== 'image/png') {
+      return 'Apenas imagens PNG são permitidas.';
+    }
+    if (file.size > MAX_IMAGE_SIZE) {
+      return 'Imagem excede o limite de 10MB.';
+    }
+    return null;
+  };
+
+  const handleBackgroundImageChange = (event) => {
+    setQuizError('');
+    const file = event.target.files?.[0] ?? null;
+
+    if (!file) {
+      setBackgroundFile(null);
+      setBackgroundPreviewFromServer(quiz?.backgroundImageUrl ?? '');
+      return;
+    }
+
+    const validationError = validateImageFile(file);
+    if (validationError) {
+      setQuizError(validationError);
+      if (backgroundInputRef.current) {
+        backgroundInputRef.current.value = '';
+      }
+      return;
+    }
+
+    setBackgroundFile(file);
+    setBackgroundPreviewFromFile(file);
+  };
+
+  const handleHeaderImageChange = (event) => {
+    setQuizError('');
+    const file = event.target.files?.[0] ?? null;
+
+    if (!file) {
+      setHeaderFile(null);
+      setHeaderPreviewFromServer(quiz?.headerImageUrl ?? '');
+      return;
+    }
+
+    const validationError = validateImageFile(file);
+    if (validationError) {
+      setQuizError(validationError);
+      if (headerInputRef.current) {
+        headerInputRef.current.value = '';
+      }
+      return;
+    }
+
+    setHeaderFile(file);
+    setHeaderPreviewFromFile(file);
   };
 
   const handleOptionChange = (index, value) => {
@@ -123,6 +297,9 @@ const AdminQuestionManager = () => {
 
     const trimmedTitle = quizDetails.title.trim();
     const trimmedDescription = quizDetails.description.trim();
+    const wantsLimitedQuestions = quizDetails.questionUsage === 'LIMITED';
+    const trimmedLimit = quizDetails.questionLimit.trim();
+    let normalizedLimit = null;
 
     if (trimmedTitle.length < 3) {
       setQuizError('Informe um título com ao menos 3 caracteres.');
@@ -134,22 +311,88 @@ const AdminQuestionManager = () => {
       return;
     }
 
-    const hasChanges =
-      trimmedTitle !== (quiz?.title ?? '') || trimmedDescription !== (quiz?.description ?? '');
+    if (wantsLimitedQuestions) {
+      const parsedLimit = Number(trimmedLimit);
+      if (trimmedLimit.length === 0 || !Number.isInteger(parsedLimit) || parsedLimit < 1) {
+        setQuizError('Informe uma quantidade máxima de perguntas válida (a partir de 1).');
+        return;
+      }
+      normalizedLimit = parsedLimit;
+    }
 
-    if (!hasChanges) {
+    const currentMode = quiz?.mode ?? 'SEQUENTIAL';
+    const currentLimit = quiz?.questionLimit ?? null;
+
+    const hasChanges =
+      trimmedTitle !== (quiz?.title ?? '') ||
+      trimmedDescription !== (quiz?.description ?? '') ||
+      quizDetails.mode !== currentMode ||
+      normalizedLimit !== currentLimit;
+
+    const hasImageChanges = Boolean(backgroundFile || headerFile);
+
+    if (!hasChanges && !hasImageChanges) {
       setQuizFeedback('Nenhuma alteração detectada.');
       return;
     }
 
     try {
       setUpdatingQuiz(true);
-      const response = await api.patch(`/admin/quizzes/${quizId}`, {
-        title: trimmedTitle,
-        description: trimmedDescription,
-      });
-      setQuiz(response.data);
-      setQuizFeedback('Quiz atualizado com sucesso!');
+      const payload = {};
+
+      if (trimmedTitle !== (quiz?.title ?? '')) {
+        payload.title = trimmedTitle;
+      }
+      if (trimmedDescription !== (quiz?.description ?? '')) {
+        payload.description = trimmedDescription;
+      }
+      if (quizDetails.mode !== currentMode) {
+        payload.mode = quizDetails.mode;
+      }
+      if (normalizedLimit !== currentLimit) {
+        payload.questionLimit = normalizedLimit;
+      }
+
+      let latestQuizData = quiz;
+
+      if (hasChanges) {
+        const response = await api.patch(`/admin/quizzes/${quizId}`, payload);
+        latestQuizData = response.data;
+        setQuiz(response.data);
+        setQuizFeedback('Quiz atualizado com sucesso!');
+      }
+
+      if (hasImageChanges) {
+        const formData = new FormData();
+        if (backgroundFile) {
+          formData.append('backgroundImage', backgroundFile);
+        }
+        if (headerFile) {
+          formData.append('headerImage', headerFile);
+        }
+
+        const response = await api.patch(`/admin/quizzes/${quizId}/media`, formData, {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+          },
+        });
+        latestQuizData = response.data;
+        setQuiz(response.data);
+        setQuizFeedback(hasChanges ? 'Quiz atualizado com sucesso!' : 'Imagens atualizadas com sucesso!');
+      }
+
+      if (latestQuizData) {
+        setBackgroundPreviewFromServer(latestQuizData.backgroundImageUrl ?? '');
+        setHeaderPreviewFromServer(latestQuizData.headerImageUrl ?? '');
+        setBackgroundFile(null);
+        setHeaderFile(null);
+        if (backgroundInputRef.current) {
+          backgroundInputRef.current.value = '';
+        }
+        if (headerInputRef.current) {
+          headerInputRef.current.value = '';
+        }
+      }
     } catch (err) {
       setQuizError(err.response?.data?.message || 'Não foi possível atualizar o quiz.');
     } finally {
@@ -323,6 +566,91 @@ const AdminQuestionManager = () => {
             placeholder="Descrição do quiz"
             required
           />
+        </div>
+        <div className="form-field">
+          <label htmlFor="quiz-mode">Modo das perguntas</label>
+          <select id="quiz-mode" value={quizDetails.mode} onChange={handleQuizModeChange}>
+            <option value="SEQUENTIAL">Sequencial (ordem fixa)</option>
+            <option value="RANDOM">Aleatório (ordem aleatória)</option>
+          </select>
+          <small style={{ color: '#64748b' }}>
+            No modo aleatório, a ordem das perguntas pode variar a cada participação.
+          </small>
+        </div>
+        <div className="form-field">
+          <label htmlFor="quiz-question-usage">Perguntas utilizadas no quiz</label>
+          <select
+            id="quiz-question-usage"
+            value={quizDetails.questionUsage}
+            onChange={handleQuestionUsageChange}
+          >
+            <option value="ALL">Usar todas as perguntas cadastradas</option>
+            <option value="LIMITED">Definir uma quantidade máxima</option>
+          </select>
+        </div>
+        {quizDetails.questionUsage === 'LIMITED' && (
+          <div className="form-field">
+            <label htmlFor="quiz-question-limit">Quantidade máxima de perguntas</label>
+            <input
+              id="quiz-question-limit"
+              type="number"
+              min="1"
+              value={quizDetails.questionLimit}
+              onChange={handleQuestionLimitChange}
+              placeholder="Ex.: 5"
+            />
+            <small style={{ color: '#64748b' }}>
+              Quando houver menos perguntas cadastradas, o quiz usará todas as disponíveis.
+            </small>
+          </div>
+        )}
+        <div className="form-field">
+          <label htmlFor="quiz-background-image">Imagem de fundo do quiz (PNG até 10MB)</label>
+          <div className="image-upload-panel">
+            {backgroundPreview ? (
+              <img
+                src={backgroundPreview}
+                alt="Pré-visualização do background do quiz"
+                className="quiz-image-preview"
+              />
+            ) : (
+              <div className="quiz-image-placeholder">Sem imagem de fundo</div>
+            )}
+            <div className="image-upload-actions">
+              <input
+                id="quiz-background-image"
+                type="file"
+                accept="image/png"
+                onChange={handleBackgroundImageChange}
+                ref={backgroundInputRef}
+              />
+              <small>Carregue um arquivo PNG para personalizar o fundo do quiz.</small>
+            </div>
+          </div>
+        </div>
+        <div className="form-field">
+          <label htmlFor="quiz-header-image">Imagem de header do quiz (PNG até 10MB)</label>
+          <div className="image-upload-panel">
+            {headerPreview ? (
+              <img
+                src={headerPreview}
+                alt="Pré-visualização do header do quiz"
+                className="quiz-image-preview"
+              />
+            ) : (
+              <div className="quiz-image-placeholder">Sem imagem de header</div>
+            )}
+            <div className="image-upload-actions">
+              <input
+                id="quiz-header-image"
+                type="file"
+                accept="image/png"
+                onChange={handleHeaderImageChange}
+                ref={headerInputRef}
+              />
+              <small>Essa imagem será exibida junto ao título do quiz.</small>
+            </div>
+          </div>
         </div>
         {quizError && <div className="page-error" style={{ margin: 0 }}>{quizError}</div>}
         {quizFeedback && <div className="tag success">{quizFeedback}</div>}

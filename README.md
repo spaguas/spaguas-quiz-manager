@@ -51,19 +51,23 @@ O servidor será iniciado em `http://localhost:4000` (ajuste a porta via variáv
 ## Execução com Docker (banco externo)
 1. Garanta que o arquivo `.env` contém os dados de conexão para o banco externo acessível a partir do container (por exemplo, use o IP/hostname público do servidor e não `localhost`).
 2. Opcionalmente ajuste `PORT` (porta exposta da API) e `SERVE_CLIENT=true` para servir os arquivos estáticos da interface dentro do mesmo container.
-3. Faça o build da imagem:
+3. Faça o build da imagem (o Dockerfile já instala OpenSSL e ajusta permissões para o Prisma):
    ```bash
-   docker compose build
+   docker compose build --no-cache
    ```
 4. Aplique as migrações na base externa:
    ```bash
    docker compose run --rm app npx prisma migrate deploy
    ```
-5. Inicie os serviços:
+5. (Opcional) Gere os clientes Prisma manualmente caso tenha alterado o schema:
+   ```bash
+   docker compose run --rm app npx prisma generate
+   ```
+6. Inicie os serviços:
    ```bash
    docker compose up -d
    ```
-6. A API (e a SPA embarcada) ficarão disponíveis em `http://localhost:${PORT:-4000}`.
+7. A API (e a SPA embarcada) ficarão disponíveis em `http://localhost:${PORT:-4000}`.
 
 > Observação: o `docker-compose.yml` não provisiona um banco local, permitindo conectar-se diretamente ao servidor PostgreSQL de produção ou staging informado via `DATABASE_URL`.
 

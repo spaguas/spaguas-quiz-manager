@@ -12,6 +12,11 @@ enum UserRole {
   USER
 }
 
+enum QuizMode {
+  SEQUENTIAL
+  RANDOM
+}
+
 model User {
   id           Int         @id @default(autoincrement())
   name         String
@@ -32,6 +37,10 @@ model Quiz {
   title       String
   description String
   isActive    Boolean      @default(true)
+  mode        QuizMode     @default(SEQUENTIAL)
+  questionLimit Int?
+  backgroundImage String?
+  headerImage     String?
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
   questions   Question[]

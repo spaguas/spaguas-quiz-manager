@@ -4,6 +4,7 @@ import {
   quizUpdateSchema,
   questionCreateSchema,
   submissionSchema,
+  answerValidationSchema,
 } from '../validators/quizValidators.js';
 
 export async function createQuiz(req, res, next) {
@@ -41,11 +42,41 @@ export async function deleteQuestion(req, res, next) {
   }
 }
 
+export async function deleteQuiz(req, res, next) {
+  try {
+    const quizId = Number(req.params.quizId);
+    const result = await quizService.deleteQuiz(quizId);
+    return res.json(result);
+  } catch (error) {
+    return next(error);
+  }
+}
+
 export async function updateQuiz(req, res, next) {
   try {
     const quizId = Number(req.params.quizId);
     const payload = quizUpdateSchema.parse(req.body);
     const quiz = await quizService.updateQuiz(quizId, payload);
+    return res.json(quiz);
+  } catch (error) {
+    return next(error);
+  }
+}
+
+export async function updateQuizMedia(req, res, next) {
+  try {
+    const quizId = Number(req.params.quizId);
+    const backgroundImage = req.files?.backgroundImage?.[0] ?? null;
+    const headerImage = req.files?.headerImage?.[0] ?? null;
+
+    if (!backgroundImage && !headerImage) {
+      return res.status(400).json({ message: 'Envie ao menos uma imagem para atualizar.' });
+    }
+
+    const quiz = await quizService.updateQuizMedia(quizId, {
+      backgroundImage,
+      headerImage,
+    });
     return res.json(quiz);
   } catch (error) {
     return next(error);
@@ -91,6 +122,21 @@ export async function getQuizForPlay(req, res, next) {
       return res.status(404).json({ message: 'Quiz não encontrado' });
     }
     return res.json(quiz);
+  } catch (error) {
+    return next(error);
+  }
+}
+
+export async function validateQuestionAnswer(req, res, next) {
+  try {
+    const payload = answerValidationSchema.parse({
+      quizId: Number(req.params.quizId),
+      questionId: Number(req.params.questionId),
+      optionId: Number(req.body?.optionId),
+    });
+
+    const result = await quizService.validateQuestionAnswer(payload);
+    return res.json(result);
   } catch (error) {
     return next(error);
   }

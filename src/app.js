@@ -9,6 +9,7 @@ import authRouter from './routes/authRoutes.js';
 import userRouter from './routes/userRoutes.js';
 import gamificationRouter from './routes/gamificationRoutes.js';
 import errorHandler from './middlewares/errorHandler.js';
+import appConfig from './config/appConfig.js';
 
 const app = express();
 
@@ -16,24 +17,40 @@ app.use(cors());
 app.use(express.json());
 app.use(morgan('dev'));
 
-app.use('/api/auth', authRouter);
-app.use('/api/admin/users', userRouter);
-app.use('/api/gamification', gamificationRouter);
-app.use('/api', quizRouter);
-
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const uploadsPath = path.resolve(__dirname, '../uploads');
+if (!fs.existsSync(uploadsPath)) {
+  fs.mkdirSync(uploadsPath, { recursive: true });
+}
+app.use(`${appConfig.basePath}/uploads`, express.static(uploadsPath));
+
+const apiBase = `${appConfig.basePath}/api`;
+
+app.use(`${apiBase}/auth`, authRouter);
+app.use(`${apiBase}/admin/users`, userRouter);
+app.use(`${apiBase}/gamification`, gamificationRouter);
+app.use(apiBase, quizRouter);
+
 const clientDistPath = path.resolve(__dirname, '../client/dist');
 const shouldServeClient = process.env.SERVE_CLIENT !== 'false' && fs.existsSync(clientDistPath);
 
 if (shouldServeClient) {
-  app.use(express.static(clientDistPath));
+  app.use(appConfig.basePath || '/', express.static(clientDistPath));
 
-  app.get('*', (req, res, next) => {
-    if (req.path.startsWith('/api')) {
+  const serveSpa = (req, res, next) => {
+    const requestPath = appConfig.basePath ? req.path.replace(appConfig.basePath, '') || '/' : req.path;
+    if (requestPath.startsWith('/api') || requestPath.startsWith('/uploads')) {
       return next();
     }
     return res.sendFile(path.join(clientDistPath, 'index.html'));
-  });
+  };
+
+  if (appConfig.basePath) {
+    app.get(appConfig.basePath, serveSpa);
+  } else {
+    app.get('/', serveSpa);
+  }
+  app.get(`${appConfig.basePath}/*`, serveSpa);
 }
 
 app.use((req, res) => {

@@ -1,8 +1,24 @@
 import axios from 'axios';
 import { AUTH_STORAGE_KEY } from '../utils/storageKeys.js';
 
+const sanitizeBasePath = (value) => {
+  if (!value) {
+    return '';
+  }
+  const trimmed = value.trim();
+  if (!trimmed || trimmed === '/') {
+    return '';
+  }
+  const withLeading = trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
+  return withLeading.replace(/\/+$/, '');
+};
+
+const basePathNormalized = sanitizeBasePath(import.meta.env.VITE_BASE_PATH);
+const defaultApiBase = `${basePathNormalized}/api`.replace(/\/{2,}/g, '/') || '/api';
+const apiBaseURL = import.meta.env.VITE_API_URL || defaultApiBase;
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:4000/api',
+  baseURL: apiBaseURL,
   timeout: 10000,
 });
 

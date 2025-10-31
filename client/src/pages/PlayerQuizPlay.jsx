@@ -285,201 +285,214 @@ const PlayerQuizPlay = () => {
   const nextDisabled = !currentResponse?.isConfirmed || quizCompleted;
   const submitDisabled = submitting || quizCompleted;
   const submitLabel = submitting ? 'Enviando...' : quizCompleted ? 'Quiz finalizado' : 'Enviar respostas';
+  const hasBackground = Boolean(quiz.backgroundImageUrl);
 
   return (
-    <div className={`quiz-play-wrapper ${quiz.backgroundImageUrl ? 'has-background' : ''}`}>
-      {quiz.backgroundImageUrl && (
+    <div className={`quiz-play-wrapper ${hasBackground ? 'has-background' : ''}`}>
+      {hasBackground && (
         <div
           className={`quiz-background-layer ${backgroundLoaded ? 'loaded' : ''}`}
           style={{ backgroundImage: `url(${quiz.backgroundImageUrl})` }}
         />
       )}
-      <div className="grid quiz-content">
-        <div className="page-title">
-          <div>
-            {quiz.headerImageUrl && (
-              <img
-                src={quiz.headerImageUrl}
-                alt={`Imagem do quiz ${quiz.title}`}
-                className="quiz-header-image"
-              />
-            )}
-            <h1>{quiz.title}</h1>
-            <p className="page-description">{quiz.description}</p>
-          </div>
-        <button className="button ghost" type="button" onClick={() => navigate(`/play/quiz/${quizId}/ranking`)}>
-          Ranking
-        </button>
-      </div>
-
-      {stage === 'identification' && (
-        <form className="card wizard-identification" onSubmit={handleStartQuiz}>
-          <h2>Identificação</h2>
-          <p style={{ color: '#475569', marginBottom: '1rem' }}>
-            Informe seu nome e e-mail para participar do ranking (cada e-mail participa apenas uma vez por quiz).
-          </p>
-          <div className="form-field">
-            <label htmlFor="user-name">Nome</label>
-            <input
-              id="user-name"
-              type="text"
-              placeholder="Seu nome"
-              value={userName}
-              onChange={(event) => setUserName(event.target.value)}
-            />
-          </div>
-          <div className="form-field">
-            <label htmlFor="user-email">E-mail</label>
-            <input
-              id="user-email"
-              type="email"
-              placeholder="seuemail@exemplo.com"
-              value={userEmail}
-              onChange={(event) => setUserEmail(event.target.value)}
-            />
-          </div>
-          {identificationError && <div className="page-error" style={{ margin: 0 }}>{identificationError}</div>}
-          <div className="form-actions">
-            <button className="button" type="submit">
-              Iniciar quiz
-            </button>
-            <button className="button ghost" type="button" onClick={() => navigate('/play')}>
-              Voltar
-            </button>
-          </div>
-        </form>
-      )}
-
-      {stage !== 'identification' && currentQuestion && (
-        <>
-          <div className="card wizard-progress-card">
-            <h2 style={{ marginBottom: '1rem' }}>Progresso</h2>
-            <div className="wizard-progress">
-              {quiz.questions.map((question, index) => {
-                const response = responses[question.id];
-                const statusClass = response?.isConfirmed
-                  ? response.isCorrect
-                    ? 'success'
-                    : 'error'
-                  : 'pending';
-                const isActive = index === currentQuestionIndex;
-                return (
-                  <button
-                    key={question.id}
-                    type="button"
-                    className={`wizard-step ${statusClass} ${isActive ? 'active' : ''}`}
-                    onClick={() => handleGoToQuestion(index)}
-                    disabled={!canNavigateTo(index)}
-                  >
-                    <span className="wizard-step-index">{index + 1}</span>
-                    <span className="wizard-step-label">
-                      {response?.isConfirmed ? (response.isCorrect ? 'Correta' : 'Errada') : 'Pendente'}
-                    </span>
-                  </button>
-                );
-              })}
+      <div className="quiz-content-wrapper">
+        <div className="grid quiz-content">
+          <div className={`page-title ${hasBackground ? 'with-background' : ''}`}>
+            {/*<div className={hasBackground ? 'page-title-card' : ''}>
+               Imagem do header removida propositalmente para priorizar o formulário */}
+              {/* {quiz.headerImageUrl && (
+                <img
+                  src={quiz.headerImageUrl}
+                  alt={`Imagem do quiz ${quiz.title}`}
+                  className="quiz-header-image"
+                />
+              )} 
+              <h1>{quiz.title}</h1>
+               Descrição do quiz ocultada durante o play para manter o layout limpo */}
+              {/* <p className="page-description">{quiz.description}</p> 
             </div>
-          </div>
-
-          <div className={`card wizard-question ${answerStatus ? `status-${answerStatus}` : ''}`}>
-            <div className="wizard-question-header">
-              <span className="wizard-question-index">
-                Pergunta {currentQuestionIndex + 1} de {quiz.questions.length}
-              </span>
-              {currentResponse?.isConfirmed && (
-                <span className={`tag ${currentResponse.isCorrect ? 'success' : 'danger'}`}>
-                  {currentResponse.isCorrect ? 'Resposta correta' : 'Resposta incorreta'}
-                </span>
-              )}
-            </div>
-            <h3>{currentQuestion.text}</h3>
-            <div className="options-list">
-              {currentQuestion.options.map((option) => (
-                <label
-                  key={option.id}
-                  className={`option-item ${currentResponse?.selectedOptionId === option.id ? 'selected' : ''}`}
-                  htmlFor={`question-${currentQuestion.id}-option-${option.id}`}
-                >
-                  <input
-                    id={`question-${currentQuestion.id}-option-${option.id}`}
-                    type="radio"
-                    name={`question-${currentQuestion.id}`}
-                    checked={currentResponse?.selectedOptionId === option.id}
-                    onChange={() => handleOptionSelect(currentQuestion.id, option.id)}
-                    disabled={currentResponse?.isConfirmed || quizCompleted}
-                  />
-                  <span>{option.text}</span>
-                </label>
-              ))}
-            </div>
-            {answerStatus === 'correct' && (
-              <div className="answer-feedback success">Boa! Você acertou esta pergunta.</div>
-            )}
-            {answerStatus === 'incorrect' && (
-              <div className="answer-feedback danger">Resposta incorreta. Continue tentando nas próximas!</div>
-            )}
-            {questionError && <div className="page-error" style={{ marginTop: '1rem' }}>{questionError}</div>}
-            <div className="wizard-actions">
-              <button
-                className="button ghost"
-                type="button"
-                onClick={handlePreviousQuestion}
-                disabled={currentQuestionIndex === 0 || validating}
-              >
-                Pergunta anterior
-              </button>
-              {!currentResponse?.isConfirmed && (
-                <button className="button" type="button" onClick={handleConfirmAnswer} disabled={confirmDisabled}>
-                  {validating ? 'Verificando...' : 'Confirmar resposta'}
-                </button>
-              )}
-              {currentResponse?.isConfirmed && !isLastQuestion && (
-                <button className="button" type="button" onClick={handleNextQuestion} disabled={nextDisabled}>
-                  Próxima pergunta
-                </button>
-              )}
-              {currentResponse?.isConfirmed && isLastQuestion && (
-                <button className="button" type="button" onClick={handleSubmitQuiz} disabled={submitDisabled}>
-                  {submitLabel}
-                </button>
-              )}
-            </div>
-          </div>
-
-          {submissionError && <div className="page-error">{submissionError}</div>}
-        </>
-      )}
-
-      {quizCompleted && !result && (
-        <div className="card">
-          <h2>Resultado</h2>
-          <p>Quase lá! Aguarde alguns instantes e tente novamente caso o resultado não seja exibido.</p>
-        </div>
-      )}
-
-      {result && (
-        <div className="card">
-          <h2>Resultado</h2>
-          <p>
-            Você acertou <strong>{result.score}</strong> de <strong>{result.total}</strong> perguntas
-            ({result.percentage.toFixed(2)}%). Sua posição atual no ranking é <strong>{result.position}º</strong>.
-          </p>
-          <div className="form-actions">
-            <button className="button secondary" type="button" onClick={() => navigate(`/play/quiz/${quizId}/ranking`)}>
-              Ver ranking completo
-            </button>
             <button
               className="button ghost"
               type="button"
-              onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+              onClick={() => navigate(`/play/quiz/${quizId}/ranking`)}
             >
-              Voltar ao topo
-            </button>
+              Ranking
+            </button>*/}
           </div>
+
+          {stage === 'identification' && (
+            <form className="card wizard-identification" onSubmit={handleStartQuiz}>
+              <h2>Identificação</h2>
+              <p style={{ color: '#475569', marginBottom: '1rem' }}>
+                Informe seu nome e e-mail para participar do ranking (cada e-mail participa apenas uma vez por quiz).
+              </p>
+              <div className="form-field">
+                <label htmlFor="user-name">Nome</label>
+                <input
+                  id="user-name"
+                  type="text"
+                  placeholder="Seu nome"
+                  value={userName}
+                  onChange={(event) => setUserName(event.target.value)}
+                />
+              </div>
+              <div className="form-field">
+                <label htmlFor="user-email">E-mail</label>
+                <input
+                  id="user-email"
+                  type="email"
+                  placeholder="seuemail@exemplo.com"
+                  value={userEmail}
+                  onChange={(event) => setUserEmail(event.target.value)}
+                />
+              </div>
+              {identificationError && <div className="page-error" style={{ margin: 0 }}>{identificationError}</div>}
+              <div className="form-actions">
+                <button className="button" type="submit">
+                  Iniciar quiz
+                </button>
+                <button className="button ghost" type="button" onClick={() => navigate('/play')}>
+                  Voltar
+                </button>
+              </div>
+            </form>
+          )}
+
+          {stage !== 'identification' && currentQuestion && (
+            <>
+              <div className="card wizard-progress-card">
+                <h2 style={{ marginBottom: '1rem' }}>Progresso</h2>
+                <div className="wizard-progress">
+                  {quiz.questions.map((question, index) => {
+                    const response = responses[question.id];
+                    const statusClass = response?.isConfirmed
+                      ? response.isCorrect
+                        ? 'success'
+                        : 'error'
+                      : 'pending';
+                    const isActive = index === currentQuestionIndex;
+                    return (
+                      <button
+                        key={question.id}
+                        type="button"
+                        className={`wizard-step ${statusClass} ${isActive ? 'active' : ''}`}
+                        onClick={() => handleGoToQuestion(index)}
+                        disabled={!canNavigateTo(index)}
+                      >
+                        <span className="wizard-step-index">{index + 1}</span>
+                        <span className="wizard-step-label">
+                          {response?.isConfirmed ? (response.isCorrect ? 'Correta' : 'Errada') : 'Pendente'}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className={`card wizard-question ${answerStatus ? `status-${answerStatus}` : ''}`}>
+                <div className="wizard-question-header">
+                  <span className="wizard-question-index">
+                    Pergunta {currentQuestionIndex + 1} de {quiz.questions.length}
+                  </span>
+                  {currentResponse?.isConfirmed && (
+                    <span className={`tag ${currentResponse.isCorrect ? 'success' : 'danger'}`}>
+                      {currentResponse.isCorrect ? 'Resposta correta' : 'Resposta incorreta'}
+                    </span>
+                  )}
+                </div>
+                <h3>{currentQuestion.text}</h3>
+                <div className="options-list">
+                  {currentQuestion.options.map((option) => (
+                    <label
+                      key={option.id}
+                      className={`option-item ${currentResponse?.selectedOptionId === option.id ? 'selected' : ''}`}
+                      htmlFor={`question-${currentQuestion.id}-option-${option.id}`}
+                    >
+                      <input
+                        id={`question-${currentQuestion.id}-option-${option.id}`}
+                        type="radio"
+                        name={`question-${currentQuestion.id}`}
+                        checked={currentResponse?.selectedOptionId === option.id}
+                        onChange={() => handleOptionSelect(currentQuestion.id, option.id)}
+                        disabled={currentResponse?.isConfirmed || quizCompleted}
+                      />
+                      <span>{option.text}</span>
+                    </label>
+                  ))}
+                </div>
+                {answerStatus === 'correct' && (
+                  <div className="answer-feedback success">Boa! Você acertou esta pergunta.</div>
+                )}
+                {answerStatus === 'incorrect' && (
+                  <div className="answer-feedback danger">Resposta incorreta. Continue tentando nas próximas!</div>
+                )}
+                {questionError && <div className="page-error" style={{ marginTop: '1rem' }}>{questionError}</div>}
+                <div className="wizard-actions">
+                  <button
+                    className="button ghost"
+                    type="button"
+                    onClick={handlePreviousQuestion}
+                    disabled={currentQuestionIndex === 0 || validating}
+                  >
+                    Pergunta anterior
+                  </button>
+                  {!currentResponse?.isConfirmed && (
+                    <button className="button" type="button" onClick={handleConfirmAnswer} disabled={confirmDisabled}>
+                      {validating ? 'Verificando...' : 'Confirmar resposta'}
+                    </button>
+                  )}
+                  {currentResponse?.isConfirmed && !isLastQuestion && (
+                    <button className="button" type="button" onClick={handleNextQuestion} disabled={nextDisabled}>
+                      Próxima pergunta
+                    </button>
+                  )}
+                  {currentResponse?.isConfirmed && isLastQuestion && (
+                    <button className="button" type="button" onClick={handleSubmitQuiz} disabled={submitDisabled}>
+                      {submitLabel}
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {submissionError && <div className="page-error">{submissionError}</div>}
+            </>
+          )}
+
+          {quizCompleted && !result && (
+            <div className="card">
+              <h2>Resultado</h2>
+              <p>Quase lá! Aguarde alguns instantes e tente novamente caso o resultado não seja exibido.</p>
+            </div>
+          )}
+
+          {result && (
+            <div className="card">
+              <h2>Resultado</h2>
+              <p>
+                Você acertou <strong>{result.score}</strong> de <strong>{result.total}</strong> perguntas
+                ({result.percentage.toFixed(2)}%). Sua posição atual no ranking é <strong>{result.position}º</strong>.
+              </p>
+              <div className="form-actions">
+                <button
+                  className="button secondary"
+                  type="button"
+                  onClick={() => navigate(`/play/quiz/${quizId}/ranking`)}
+                >
+                  Ver ranking completo
+                </button>
+                <button
+                  className="button ghost"
+                  type="button"
+                  onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+                >
+                  Voltar ao topo
+                </button>
+              </div>
+            </div>
+          )}
         </div>
-      )}
+      </div>
     </div>
-  </div>
   );
 };
 

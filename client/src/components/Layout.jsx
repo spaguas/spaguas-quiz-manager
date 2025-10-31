@@ -7,6 +7,7 @@ const Layout = () => {
   const navigate = useNavigate();
   const { user, isAdmin: isAdminUser, logout } = useAuth();
   const isAdminRoute = location.pathname.startsWith('/admin');
+  const isPlayerFullScreen = location.pathname.startsWith('/play/quiz');
 
   const handleLogout = () => {
     logout();
@@ -14,87 +15,91 @@ const Layout = () => {
   };
 
   return (
-    <div className="app-shell">
-      <header className="topbar">
-        <div className="brand">
-          <img src={logo} alt="SP Águas" className="brand-logo" />
-          <div className="brand-text">
-            <span className="brand-title">Painel {isAdminRoute ? 'Administrativo' : 'Participante'}</span>
-            <span className="brand-subtitle"></span>
+    <div className={`app-shell ${isPlayerFullScreen ? 'app-shell--bare' : ''}`}>
+      {!isPlayerFullScreen && (
+        <header className="topbar">
+          <div className="brand">
+            <img src={logo} alt="SP Águas" className="brand-logo" />
+            <div className="brand-text">
+              <span className="brand-title">Painel {isAdminRoute ? 'Administrativo' : 'Participante'}</span>
+              <span className="brand-subtitle"></span>
+            </div>
           </div>
-        </div>
-        <nav className="topnav">
-          {isAdminUser && (
+          <nav className="topnav">
+            {isAdminUser && (
+              <div className="nav-group">
+                <span className="nav-group-title">Admin</span>
+                <NavLink
+                  to="/admin/dashboard"
+                  className={({ isActive }) => (isActive ? 'nav-link active' : 'nav-link')}
+                >
+                  Dashboard
+                </NavLink>
+                <NavLink
+                  to="/admin/quizzes"
+                  className={({ isActive }) => (isActive ? 'nav-link active' : 'nav-link')}
+                >
+                  Quizzes
+                </NavLink>
+                <NavLink
+                  to="/admin/quizzes/new"
+                  className={({ isActive }) => (isActive ? 'nav-link active' : 'nav-link')}
+                >
+                  Novo Quiz
+                </NavLink>
+                <NavLink
+                  to="/admin/users"
+                  className={({ isActive }) => (isActive ? 'nav-link active' : 'nav-link')}
+                >
+                  Usuários
+                </NavLink>
+              </div>
+            )}
             <div className="nav-group">
-              <span className="nav-group-title">Admin</span>
+              <span className="nav-group-title">Participante</span>
               <NavLink
-                to="/admin/dashboard"
+                to="/play"
                 className={({ isActive }) => (isActive ? 'nav-link active' : 'nav-link')}
               >
-                Dashboard
+                Quizzes Ativos
               </NavLink>
               <NavLink
-                to="/admin/quizzes"
+                to="/leaderboard"
                 className={({ isActive }) => (isActive ? 'nav-link active' : 'nav-link')}
               >
-                Quizzes
-              </NavLink>
-              <NavLink
-                to="/admin/quizzes/new"
-                className={({ isActive }) => (isActive ? 'nav-link active' : 'nav-link')}
-              >
-                Novo Quiz
-              </NavLink>
-              <NavLink
-                to="/admin/users"
-                className={({ isActive }) => (isActive ? 'nav-link active' : 'nav-link')}
-              >
-                Usuários
+                Ranking Global
               </NavLink>
             </div>
-          )}
-          <div className="nav-group">
-            <span className="nav-group-title">Participante</span>
-            <NavLink
-              to="/play"
-              className={({ isActive }) => (isActive ? 'nav-link active' : 'nav-link')}
-            >
-              Quizzes Ativos
-            </NavLink>
-            <NavLink
-              to="/leaderboard"
-              className={({ isActive }) => (isActive ? 'nav-link active' : 'nav-link')}
-            >
-              Ranking Global
-            </NavLink>
-          </div>
-        </nav>
-        <div className="auth-actions">
-          {user ? (
-            <>
-              <span className="user-chip">
-                {user.name} <span className="user-chip-role">{user.role}</span>
-              </span>
-              <NavLink to="/account/profile" className="button ghost">
-                Meu perfil
+          </nav>
+          <div className="auth-actions">
+            {user ? (
+              <>
+                <span className="user-chip">
+                  {user.name} <span className="user-chip-role">{user.role}</span>
+                </span>
+                <NavLink to="/account/profile" className="button ghost">
+                  Meu perfil
+                </NavLink>
+                <button className="button ghost" type="button" onClick={handleLogout}>
+                  Sair
+                </button>
+              </>
+            ) : (
+              <NavLink to="/admin/login" className="button ghost">
+                Login admin
               </NavLink>
-              <button className="button ghost" type="button" onClick={handleLogout}>
-                Sair
-              </button>
-            </>
-          ) : (
-            <NavLink to="/admin/login" className="button ghost">
-              Login admin
-            </NavLink>
-          )}
-        </div>
-      </header>
-      <main className="main-content">
+            )}
+          </div>
+        </header>
+      )}
+      <main className={`main-content ${isPlayerFullScreen ? 'main-content--bare' : ''}`}>
         <Outlet />
       </main>
-      <footer className="footer">
-        <span>© {new Date().getFullYear()} Spaguas Quiz</span>
-      </footer>
+      {!isPlayerFullScreen && (
+        <footer className="footer">
+          <span>© {new Date().getFullYear()} Spaguas Quiz</span>
+        </footer>
+      )}
     </div>
   );
 };

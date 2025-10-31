@@ -130,12 +130,37 @@ a {
   margin: 0 auto;
 }
 
+.app-shell--bare {
+  min-height: 100vh;
+}
+
+.main-content--bare {
+  max-width: none;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  justify-content: center;
+}
+
 .page-title {
   display: flex;
   align-items: center;
   justify-content: space-between;
   margin-bottom: 1.5rem;
   gap: 1rem;
+}
+
+.page-title.with-background {
+  align-items: stretch;
+}
+
+.page-title-card {
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: 14px;
+  padding: 1.25rem;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12);
+  border: 1px solid rgba(148, 163, 184, 0.2);
 }
 
 .page-title h1 {
@@ -150,7 +175,7 @@ a {
 }
 
 .grid {
-  display: grid;
+  /*display: grid;*/
   gap: 1.5rem;
 }
 
@@ -575,7 +600,23 @@ a {
 .quiz-content {
   position: relative;
   z-index: 1;
+  width: min(100%, 960px);
+}
+
+.quiz-content-wrapper {
+  position: relative;
+  z-index: 1;
+  width: 100%;
   min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4rem 1.5rem;
+  box-sizing: border-box;
+}
+
+.quiz-content-wrapper .grid {
+  width: 100%;
 }
 
 .quiz-play-wrapper.has-background .quiz-content {

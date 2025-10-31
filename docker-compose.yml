@@ -19,4 +19,13 @@ services:
       SERVE_CLIENT: ${SERVE_CLIENT:-true}
     ports:
       - "${PORT:-4000}:4000"
+    networks:
+      - spaguas-quiz-network
     command: ["npm", "start"]
+networks:
+  spaguas-quiz-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.140.0.0/16
+

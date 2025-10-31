@@ -5,5 +5,5 @@ export default defineConfig({
     environment: 'node',
     globals: true,
     teardownTimeout: 10000,
-  },
+	  }
 });

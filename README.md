@@ -13,12 +13,33 @@ Sistema de Quiz completo construído com Node.js, Express, Prisma, PostgreSQL e 
 - Gamificação com pontuação, níveis, conquistas, medalhas e ranking global.
 
 ## Pré-requisitos
-- Node.js 18+
+- Node.js 18+ (o Prisma precisa do binário `node` disponível para executar o client)
 - PostgreSQL 13+
 - Uma ferramenta de cliente HTTP (Insomnia, Postman, cURL, etc.)
 
+## Variáveis de ambiente importantes
+
+| Variável                | Ambiente      | Descrição                                                                                              | Valor padrão (dev) |
+|-------------------------|---------------|---------------------------------------------------------------------------------------------------------|--------------------|
+| `DATABASE_URL`          | backend       | String de conexão PostgreSQL (com schema)                                                              | —                  |
+| `PORT`                  | backend       | Porta do servidor HTTP                                                                                 | `4000`             |
+| `APP_BASE_PATH`         | backend       | Subcaminho público (ex.: `/quiz`). Se vazio, o backend assume `/quiz` automaticamente                   | `/quiz`            |
+| `APP_PUBLIC_URL`        | backend       | URL pública raiz usada para montar links absolutos (uploads, etc.)                                     | `http://localhost:4000` |
+| `SERVE_CLIENT`          | backend       | Quando `true`, o servidor Express entrega o build do frontend                                          | `true`             |
+| `REQUEST_SIZE_LIMIT`    | backend       | Limite máximo aceito pelo Express para payloads JSON/form (`express.json/urlencoded`)                  | `15mb`             |
+| `MAX_UPLOAD_SIZE_MB`    | backend       | Limite (em MB) aplicado pelo Multer para cada imagem de quiz                                           | `10`               |
+| `SMTP_*` / `APP_URL`    | backend       | Configurações de envio de e-mail para recuperação de senha                                             | —                  |
+| `VITE_BASE_PATH`        | frontend      | Mesmo subcaminho do backend; o build do Vite assume `/quiz` caso não seja informado                    | `/quiz`            |
+| `VITE_API_URL`          | frontend      | Base da API consumida pelo frontend. Quando omisso, é derivado de `VITE_BASE_PATH` (`<base>/api`)      | `http://localhost:4000/quiz/api` |
+| `VITE_PROXY_TARGET`     | frontend dev  | Alvo do proxy do Vite para `/quiz/api` e `/quiz/uploads`                                               | `http://localhost:4000` |
+| `VITE_MAX_UPLOAD_SIZE_MB` | frontend   | Reflete o limite aplicado no backend para exibir mensagens de validação                                | `10`               |
+
+> **Importante:** manuseie sempre o mesmo subpath (`/quiz`) em todos os ambientes. O backend, o proxy do Vite e o Router do React já assumem esse valor como padrão, garantindo compatibilidade com o Nginx em produção.
+> Ao alterar `MAX_UPLOAD_SIZE_MB`, lembre-se de ajustar `VITE_MAX_UPLOAD_SIZE_MB`, `REQUEST_SIZE_LIMIT` (se necessário) e o `client_max_body_size` do proxy reverso.
+
 ## Configuração do backend
 1. Duplique `.env.example` para `.env`, ajuste `DATABASE_URL` para sua instância Postgres, defina um `JWT_SECRET` forte e configure `PASSWORD_RESET_TOKEN_EXPIRY_MINUTES` conforme a política desejada (padrão: 60 minutos).
+   - Se quiser alterar o subcaminho público, ajuste `APP_BASE_PATH`; do contrário, mantenha ou deixe vazio para usar `/quiz`.
 2. Instale as dependências (executado fora deste ambiente):
    ```bash
    npm install
@@ -33,10 +54,11 @@ Sistema de Quiz completo construído com Node.js, Express, Prisma, PostgreSQL e 
    npm run dev
    ```
 
-O servidor será iniciado em `http://localhost:4000` (ajuste a porta via variável `PORT`).
+O servidor será iniciado em `http://localhost:4000/quiz/api` (ajuste a porta via variável `PORT`).
 
 ## Configuração da interface web
 1. Acesse a pasta `client` e duplique `.env.example` para `.env`, configurando `VITE_API_URL` se necessário.
+   - `VITE_BASE_PATH=/quiz` mantém o mesmo subcaminho do backend.
 2. Instale as dependências do frontend:
    ```bash
    cd client
@@ -46,10 +68,12 @@ O servidor será iniciado em `http://localhost:4000` (ajuste a porta via variáv
    ```bash
    npm run dev
    ```
-4. A aplicação estará disponível em `http://localhost:5173` consumindo o backend em `http://localhost:4000/api`.
+4. A aplicação estará disponível em `http://localhost:5173/quiz/` consumindo o backend em `http://localhost:4000/quiz/api`.
+   - O Vite já proxia as rotas `/quiz/api` e `/quiz/uploads` para o backend, mantendo o comportamento do Nginx utilizado em produção.
 
 ## Execução com Docker (banco externo)
 1. Garanta que o arquivo `.env` contém os dados de conexão para o banco externo acessível a partir do container (por exemplo, use o IP/hostname público do servidor e não `localhost`).
+   - Confirme que `APP_BASE_PATH=/quiz` (valor padrão) continua configurado para o proxy reverso.
 2. Opcionalmente ajuste `PORT` (porta exposta da API) e `SERVE_CLIENT=true` para servir os arquivos estáticos da interface dentro do mesmo container.
 3. Faça o build da imagem (o Dockerfile já instala OpenSSL e ajusta permissões para o Prisma):
    ```bash
@@ -67,7 +91,9 @@ O servidor será iniciado em `http://localhost:4000` (ajuste a porta via variáv
    ```bash
    docker compose up -d
    ```
-7. A API (e a SPA embarcada) ficarão disponíveis em `http://localhost:${PORT:-4000}`.
+7. A API (e a SPA embarcada) ficarão disponíveis em `http://localhost:${PORT:-4000}/quiz/`.
+   - Para manter compatibilidade com o Nginx: configure o proxy para encaminhar `https://seu-dominio/quiz/` → container na porta `4000`. As rotas `/quiz/api` e `/quiz/uploads` serão resolvidas pelo Express.
+   - Ajuste `client_max_body_size` no Nginx (ex.: `client_max_body_size 15m;`) para evitar erros HTTP 413 ao enviar imagens grandes.
 
 > Observação: o `docker-compose.yml` não provisiona um banco local, permitindo conectar-se diretamente ao servidor PostgreSQL de produção ou staging informado via `DATABASE_URL`.
 

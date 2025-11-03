@@ -210,7 +210,13 @@ const AdminQuestionManager = () => {
     }));
   };
 
-  const MAX_IMAGE_SIZE = 10 * 1024 * 1024;
+  const maxUploadSizeMbEnv = Number(import.meta.env.VITE_MAX_UPLOAD_SIZE_MB ?? '10');
+  const effectiveUploadSizeMb = Number.isFinite(maxUploadSizeMbEnv) && maxUploadSizeMbEnv > 0 ? maxUploadSizeMbEnv : 10;
+  const maxUploadSizeLabelValue = Number.isInteger(effectiveUploadSizeMb)
+    ? String(effectiveUploadSizeMb)
+    : effectiveUploadSizeMb.toFixed(1);
+  const MAX_IMAGE_SIZE = effectiveUploadSizeMb * 1024 * 1024;
+  const maxImageSizeLabel = `${maxUploadSizeLabelValue}MB`;
 
   const validateImageFile = (file) => {
     if (!file) {
@@ -220,7 +226,7 @@ const AdminQuestionManager = () => {
       return 'Apenas imagens PNG são permitidas.';
     }
     if (file.size > MAX_IMAGE_SIZE) {
-      return 'Imagem excede o limite de 10MB.';
+      return `Imagem excede o limite de ${maxImageSizeLabel}.`;
     }
     return null;
   };
@@ -769,7 +775,7 @@ const AdminQuestionManager = () => {
           <label htmlFor="quiz-background-video-muted">Reproduzir vídeo sem áudio</label>
         </div>
         <div className="form-field">
-          <label htmlFor="quiz-background-image">Imagem de fundo do quiz (PNG até 10MB)</label>
+          <label htmlFor="quiz-background-image">Imagem de fundo do quiz (PNG até {maxImageSizeLabel})</label>
           <div className="image-upload-panel">
             {backgroundPreview ? (
               <img
@@ -793,7 +799,7 @@ const AdminQuestionManager = () => {
           </div>
         </div>
         <div className="form-field">
-          <label htmlFor="quiz-header-image">Imagem de header do quiz (PNG até 10MB)</label>
+          <label htmlFor="quiz-header-image">Imagem de header do quiz (PNG até {maxImageSizeLabel})</label>
           <div className="image-upload-panel">
             {headerPreview ? (
               <img

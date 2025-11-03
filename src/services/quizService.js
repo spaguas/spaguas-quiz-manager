@@ -467,6 +467,7 @@ export async function validateQuestionAnswer({ quizId, questionId, optionId }) {
         select: {
           id: true,
           isCorrect: true,
+          text: true,
         },
       },
     },
@@ -482,10 +483,18 @@ export async function validateQuestionAnswer({ quizId, questionId, optionId }) {
     throw new HttpError(400, 'Alternativa inválida para esta pergunta');
   }
 
+  const correctOptions = question.options
+    .filter((item) => item.isCorrect)
+    .map((item) => ({
+      id: item.id,
+      text: item.text,
+    }));
+
   return {
     questionId,
     optionId,
     isCorrect: option.isCorrect,
+    correctOptions,
   };
 }
 

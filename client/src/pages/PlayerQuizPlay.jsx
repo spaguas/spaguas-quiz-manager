@@ -133,6 +133,7 @@ const PlayerQuizPlay = () => {
             selectedOptionId: null,
             isConfirmed: false,
             isCorrect: null,
+            correctOptions: [],
           };
         });
         setQuiz(quizData);
@@ -228,7 +229,8 @@ const PlayerQuizPlay = () => {
     }
 
     setResponses((prev) => {
-      const current = prev[questionId] ?? { selectedOptionId: null, isConfirmed: false, isCorrect: null };
+      const current =
+        prev[questionId] ?? { selectedOptionId: null, isConfirmed: false, isCorrect: null, correctOptions: [] };
       if (current.isConfirmed) {
         return prev;
       }
@@ -238,6 +240,7 @@ const PlayerQuizPlay = () => {
         [questionId]: {
           ...current,
           selectedOptionId: optionId,
+          correctOptions: [],
         },
       };
     });
@@ -309,6 +312,7 @@ const PlayerQuizPlay = () => {
           ...prev[currentQuestion.id],
           isConfirmed: true,
           isCorrect: Boolean(response.data?.isCorrect),
+          correctOptions: Array.isArray(response.data?.correctOptions) ? response.data.correctOptions : [],
         },
       }));
       setQuestionError('');
@@ -409,6 +413,10 @@ const PlayerQuizPlay = () => {
   const nextDisabled = !currentResponse?.isConfirmed || quizCompleted;
   const submitDisabled = submitting || quizCompleted;
   const submitLabel = submitting ? 'Enviando...' : quizCompleted ? 'Quiz finalizado' : 'Enviar respostas';
+  const correctAnswersText =
+    currentResponse?.correctOptions && currentResponse.correctOptions.length > 0
+      ? currentResponse.correctOptions.map((option) => option.text).join(', ')
+      : '';
 
   return (
     <div className={`quiz-play-wrapper ${hasBackground ? 'has-background' : ''}`}>
@@ -560,23 +568,37 @@ const PlayerQuizPlay = () => {
                 </div>
                 <h3>{currentQuestion.text}</h3>
                 <div className="options-list">
-                  {currentQuestion.options.map((option) => (
-                    <label
-                      key={option.id}
-                      className={`option-item ${currentResponse?.selectedOptionId === option.id ? 'selected' : ''}`}
-                      htmlFor={`question-${currentQuestion.id}-option-${option.id}`}
-                    >
-                      <input
-                        id={`question-${currentQuestion.id}-option-${option.id}`}
-                        type="radio"
-                        name={`question-${currentQuestion.id}`}
-                        checked={currentResponse?.selectedOptionId === option.id}
-                        onChange={() => handleOptionSelect(currentQuestion.id, option.id)}
-                        disabled={currentResponse?.isConfirmed || quizCompleted}
-                      />
-                      <span>{option.text}</span>
-                    </label>
-                  ))}
+                  {currentQuestion.options.map((option) => {
+                    const isSelected = currentResponse?.selectedOptionId === option.id;
+                    const isCorrectOption = currentResponse?.isConfirmed && currentResponse?.correctOptions?.some((item) => item.id === option.id);
+                    const shouldHighlightCorrect = !currentResponse?.isCorrect && isCorrectOption;
+                    const optionClassName = [
+                      'option-item',
+                      isSelected ? 'selected' : '',
+                      shouldHighlightCorrect ? 'correct-answer' : '',
+                    ]
+                      .filter(Boolean)
+                      .join(' ');
+
+                    return (
+                      <label
+                        key={option.id}
+                        className={optionClassName}
+                        htmlFor={`question-${currentQuestion.id}-option-${option.id}`}
+                      >
+                        <input
+                          id={`question-${currentQuestion.id}-option-${option.id}`}
+                          type="radio"
+                          name={`question-${currentQuestion.id}`}
+                          checked={isSelected}
+                          onChange={() => handleOptionSelect(currentQuestion.id, option.id)}
+                          disabled={currentResponse?.isConfirmed || quizCompleted}
+                        />
+                        <span>{option.text}</span>
+                        {shouldHighlightCorrect && <span className="option-chip">Resposta correta</span>}
+                      </label>
+                    );
+                  })}
                 </div>
                 {answerStatus === 'correct' && (
                   <div className="answer-feedback success">Boa! Você acertou esta pergunta.</div>

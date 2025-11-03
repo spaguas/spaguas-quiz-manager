@@ -368,6 +368,7 @@ a {
   border-radius: 10px;
   border: 1px solid rgba(148, 163, 184, 0.4);
   background: #ffffff;
+  transition: border 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
 }
 
 .option-item.selected {
@@ -375,14 +376,32 @@ a {
   background: rgba(56, 189, 248, 0.12);
 }
 
-.option-item.correct {
-  border-color: rgba(34, 197, 94, 0.6);
-  background: rgba(220, 252, 231, 0.6);
+.option-item.correct-answer {
+  border-color: rgba(16, 185, 129, 0.75);
+  background: rgba(16, 185, 129, 0.12);
+  box-shadow: 0 0 0 2px rgba(45, 212, 191, 0.28);
+}
+
+.option-item.correct-answer span {
+  color: #0f5132;
+  font-weight: 600;
 }
 
 .option-item input[type='radio'],
 .option-item input[type='checkbox'] {
   transform: scale(1.2);
+}
+
+.option-chip {
+  margin-left: auto;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  background: rgba(16, 185, 129, 0.85);
+  color: #ecfdf5;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
 .empty-state {
@@ -819,6 +838,11 @@ a {
 .answer-feedback.danger {
   background: rgba(248, 113, 113, 0.2);
   color: #b91c1c;
+}
+
+.answer-feedback.info {
+  background: rgba(59, 130, 246, 0.18);
+  color: #1d4ed8;
 }
 
 .wizard-actions {

@@ -589,7 +589,7 @@ a {
   background-repeat: no-repeat;
   opacity: 0;
   transition: opacity 0.6s ease;
-  filter: brightness(0.45);
+  filter: brightness(var(--quiz-background-intensity, 0.65));
   z-index: 0;
   pointer-events: none;
 }
@@ -608,7 +608,7 @@ a {
   background: #0f172a;
   opacity: 0;
   transition: opacity 0.6s ease;
-  filter: brightness(0.45);
+  filter: brightness(var(--quiz-background-intensity, 0.65));
   z-index: 0;
 }
 

@@ -34,6 +34,7 @@ const AdminQuestionManager = () => {
     backgroundVideoEnd: '',
     backgroundVideoLoop: true,
     backgroundVideoMuted: true,
+    backgroundIntensity: '0.65',
   });
   const [updatingQuiz, setUpdatingQuiz] = useState(false);
   const [quizError, setQuizError] = useState('');
@@ -148,6 +149,9 @@ const AdminQuestionManager = () => {
             : '',
         backgroundVideoLoop: quiz.backgroundVideoLoop ?? true,
         backgroundVideoMuted: quiz.backgroundVideoMuted ?? true,
+        backgroundIntensity: quiz.backgroundImageIntensity !== null && quiz.backgroundImageIntensity !== undefined
+          ? String(Number(quiz.backgroundImageIntensity).toFixed(2))
+          : '0.65',
       });
       setBackgroundFile(null);
       setHeaderFile(null);
@@ -210,6 +214,13 @@ const AdminQuestionManager = () => {
     }));
   };
 
+  const handleBackgroundIntensityChange = (event) => {
+    setQuizDetails((prev) => ({
+      ...prev,
+      backgroundIntensity: event.target.value,
+    }));
+  };
+
   const maxUploadSizeMbEnv = Number(import.meta.env.VITE_MAX_UPLOAD_SIZE_MB ?? '10');
   const effectiveUploadSizeMb = Number.isFinite(maxUploadSizeMbEnv) && maxUploadSizeMbEnv > 0 ? maxUploadSizeMbEnv : 10;
   const maxUploadSizeLabelValue = Number.isInteger(effectiveUploadSizeMb)
@@ -217,6 +228,14 @@ const AdminQuestionManager = () => {
     : effectiveUploadSizeMb.toFixed(1);
   const MAX_IMAGE_SIZE = effectiveUploadSizeMb * 1024 * 1024;
   const maxImageSizeLabel = `${maxUploadSizeLabelValue}MB`;
+  const backgroundIntensityNumber = (() => {
+    const parsed = Number(quizDetails.backgroundIntensity);
+    if (!Number.isFinite(parsed)) {
+      return 0.65;
+    }
+    return Math.min(Math.max(parsed, 0.1), 1);
+  })();
+  const backgroundIntensityDisplay = backgroundIntensityNumber.toFixed(2);
 
   const validateImageFile = (file) => {
     if (!file) {
@@ -396,6 +415,10 @@ const AdminQuestionManager = () => {
     const existingVideoEnd = existingVideoUrl ? (quiz?.backgroundVideoEnd ?? null) : null;
     const existingVideoLoop = quiz?.backgroundVideoLoop ?? true;
     const existingVideoMuted = quiz?.backgroundVideoMuted ?? true;
+    const existingIntensity = quiz?.backgroundImageIntensity ?? 0.65;
+    const parsedIntensity = Number(quizDetails.backgroundIntensity);
+    const normalizedIntensityRaw = Number.isFinite(parsedIntensity) ? parsedIntensity : existingIntensity;
+    const normalizedIntensity = Math.min(Math.max(normalizedIntensityRaw, 0.1), 1);
 
     const normalizedVideoUrl = hasVideo ? videoUrl : null;
     const normalizedVideoStart = hasVideo ? (videoStartValue ?? 0) : null;
@@ -410,6 +433,7 @@ const AdminQuestionManager = () => {
     const videoMutedChanged =
       Boolean(existingVideoUrl || normalizedVideoUrl) &&
       quizDetails.backgroundVideoMuted !== existingVideoMuted;
+    const intensityChanged = Math.abs(normalizedIntensity - existingIntensity) > 0.0001;
 
     const hasChanges =
       trimmedTitle !== (quiz?.title ?? '') ||
@@ -420,7 +444,8 @@ const AdminQuestionManager = () => {
       videoStartChanged ||
       videoEndChanged ||
       videoLoopChanged ||
-      videoMutedChanged;
+      videoMutedChanged ||
+      intensityChanged;
 
     const hasImageChanges = Boolean(backgroundFile || headerFile);
 
@@ -459,6 +484,10 @@ const AdminQuestionManager = () => {
       }
       if (videoUrlChanged || videoMutedChanged) {
         payload.backgroundVideoMuted = quizDetails.backgroundVideoMuted;
+      }
+      if (intensityChanged) {
+        payload.backgroundImageIntensity = normalizedIntensity;
+        payload.backgroundVideoIntensity = normalizedIntensity;
       }
 
       let latestQuizData = quiz;
@@ -715,6 +744,23 @@ const AdminQuestionManager = () => {
           </div>
         )}
         <div className="form-field">
+          <label htmlFor="quiz-background-intensity">
+            Intensidade do fundo ({backgroundIntensityDisplay})
+          </label>
+          <input
+            id="quiz-background-intensity"
+            type="range"
+            min="0.2"
+            max="1"
+            step="0.05"
+            value={String(backgroundIntensityNumber)}
+            onChange={handleBackgroundIntensityChange}
+          />
+          <small style={{ color: '#64748b' }}>
+            Valores menores escurecem o fundo, maiores deixam a imagem mais nítida.
+          </small>
+        </div>
+        <div className="form-field">
           <label htmlFor="quiz-background-video-url">Vídeo de fundo (YouTube)</label>
           <input
             id="quiz-background-video-url"
@@ -782,6 +828,7 @@ const AdminQuestionManager = () => {
                 src={backgroundPreview}
                 alt="Pré-visualização do background do quiz"
                 className="quiz-image-preview"
+                style={{ filter: `brightness(${backgroundIntensityNumber})` }}
               />
             ) : (
               <div className="quiz-image-placeholder">Sem imagem de fundo</div>

@@ -100,7 +100,17 @@ const PlayerQuizPlay = () => {
   const [videoReady, setVideoReady] = useState(false);
   const [checkingParticipation, setCheckingParticipation] = useState(false);
 
+  const clampIntensity = (value, fallback = 0.65) => {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) {
+      return fallback;
+    }
+    return Math.min(Math.max(parsed, 0.1), 1);
+  };
+
   const backgroundVideoUrl = quiz?.backgroundVideoUrl ?? null;
+  const backgroundIntensity = clampIntensity(quiz?.backgroundImageIntensity, 0.65);
+  const videoIntensity = clampIntensity(quiz?.backgroundVideoIntensity, backgroundIntensity);
   const videoEmbedUrl = backgroundVideoUrl
     ? buildYouTubeBackgroundUrl(backgroundVideoUrl, {
         start: quiz?.backgroundVideoStart ?? 0,
@@ -403,7 +413,10 @@ const PlayerQuizPlay = () => {
   return (
     <div className={`quiz-play-wrapper ${hasBackground ? 'has-background' : ''}`}>
       {hasBackgroundVideo && videoEmbedUrl && (
-        <div className={`quiz-video-layer ${videoReady ? 'loaded' : ''}`}>
+        <div
+          className={`quiz-video-layer ${videoReady ? 'loaded' : ''}`}
+          style={{ '--quiz-background-intensity': videoIntensity }}
+        >
           <iframe
             key={videoEmbedUrl}
             src={videoEmbedUrl}
@@ -419,7 +432,10 @@ const PlayerQuizPlay = () => {
       {showBackgroundImage && (
         <div
           className={`quiz-background-layer ${backgroundLoaded ? 'loaded' : ''}`}
-          style={{ backgroundImage: `url(${quiz.backgroundImageUrl})` }}
+          style={{
+            backgroundImage: `url(${quiz.backgroundImageUrl})`,
+            '--quiz-background-intensity': backgroundIntensity,
+          }}
         />
       )}
       <div className="quiz-content-wrapper">

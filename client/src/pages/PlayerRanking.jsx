@@ -42,6 +42,7 @@ const PlayerRanking = () => {
 
   return (
     <div className="grid">
+      <br/>
       <div className="page-title">
         <div>
           <h1>Ranking – {quiz.title}</h1>

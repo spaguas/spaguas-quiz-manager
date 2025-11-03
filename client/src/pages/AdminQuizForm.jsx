@@ -16,10 +16,20 @@ const AdminQuizForm = () => {
     backgroundVideoEnd: '',
     backgroundVideoLoop: true,
     backgroundVideoMuted: true,
+    backgroundIntensity: '0.65',
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+
+  const backgroundIntensityNumber = (() => {
+    const parsed = Number(form.backgroundIntensity);
+    if (!Number.isFinite(parsed)) {
+      return 0.65;
+    }
+    return Math.min(Math.max(parsed, 0.2), 1);
+  })();
+  const backgroundIntensityDisplay = backgroundIntensityNumber.toFixed(2);
 
   const handleChange = (event) => {
     const { name, value, type, checked } = event.target;
@@ -69,6 +79,11 @@ const AdminQuizForm = () => {
     const hasVideo = videoUrl.length > 0;
     const rawStart = form.backgroundVideoStart.trim();
     const rawEnd = form.backgroundVideoEnd.trim();
+    const parsedIntensity = Number(form.backgroundIntensity);
+    if (!Number.isFinite(parsedIntensity) || parsedIntensity < 0.2 || parsedIntensity > 1) {
+      setError('Defina a intensidade do fundo entre 0.2 e 1.');
+      return;
+    }
 
     let videoStartValue = null;
     if (rawStart !== '') {
@@ -115,6 +130,8 @@ const AdminQuizForm = () => {
       backgroundVideoEnd: hasVideo ? videoEndValue ?? null : null,
       backgroundVideoLoop: form.backgroundVideoLoop,
       backgroundVideoMuted: form.backgroundVideoMuted,
+      backgroundImageIntensity: parsedIntensity,
+      backgroundVideoIntensity: parsedIntensity,
     };
 
     try {
@@ -208,6 +225,25 @@ const AdminQuizForm = () => {
             />
           </div>
         )}
+
+        <div className="form-field">
+          <label htmlFor="backgroundIntensity">
+            Intensidade do fundo ({backgroundIntensityDisplay})
+          </label>
+          <input
+            id="backgroundIntensity"
+            name="backgroundIntensity"
+            type="range"
+            min="0.2"
+            max="1"
+            step="0.05"
+            value={String(backgroundIntensityNumber)}
+            onChange={handleChange}
+          />
+          <small style={{ color: '#64748b' }}>
+            Valores menores deixam a imagem mais escura; valores maiores a tornam mais clara.
+          </small>
+        </div>
 
         <div className="form-field">
           <label htmlFor="backgroundVideoUrl">Vídeo de fundo (YouTube)</label>

@@ -1,0 +1,4 @@
+-- AlterTable
+ALTER TABLE "Quiz"
+  ADD COLUMN "backgroundImageIntensity" DOUBLE PRECISION NOT NULL DEFAULT 0.65,
+  ADD COLUMN "backgroundVideoIntensity" DOUBLE PRECISION NOT NULL DEFAULT 0.65;

@@ -44,6 +44,8 @@ export async function createQuiz({
   backgroundVideoEnd = null,
   backgroundVideoLoop = true,
   backgroundVideoMuted = true,
+  backgroundImageIntensity = 0.65,
+  backgroundVideoIntensity = 0.65,
 }) {
   const normalizedLimit = questionLimit ?? null;
   const normalizedVideoUrl = backgroundVideoUrl ? backgroundVideoUrl.trim() : null;
@@ -63,11 +65,26 @@ export async function createQuiz({
       backgroundVideoEnd: hasVideo ? backgroundVideoEnd ?? null : null,
       backgroundVideoLoop: backgroundVideoLoop ?? true,
       backgroundVideoMuted: backgroundVideoMuted ?? true,
+      backgroundImageIntensity: backgroundImageIntensity ?? 0.65,
+      backgroundVideoIntensity: backgroundVideoIntensity ?? 0.65,
     },
   });
 }
 
-export async function updateQuiz(quizId, { title, description, isActive, mode, questionLimit, backgroundVideoUrl, backgroundVideoStart, backgroundVideoEnd, backgroundVideoLoop, backgroundVideoMuted }) {
+export async function updateQuiz(quizId, {
+  title,
+  description,
+  isActive,
+  mode,
+  questionLimit,
+  backgroundVideoUrl,
+  backgroundVideoStart,
+  backgroundVideoEnd,
+  backgroundVideoLoop,
+  backgroundVideoMuted,
+  backgroundImageIntensity,
+  backgroundVideoIntensity,
+}) {
   const quiz = await prisma.quiz.findUnique({
     where: { id: quizId },
     select: { id: true },
@@ -108,6 +125,14 @@ export async function updateQuiz(quizId, { title, description, isActive, mode, q
 
   if (backgroundVideoMuted !== undefined) {
     data.backgroundVideoMuted = backgroundVideoMuted;
+  }
+
+  if (backgroundImageIntensity !== undefined) {
+    data.backgroundImageIntensity = backgroundImageIntensity;
+  }
+
+  if (backgroundVideoIntensity !== undefined) {
+    data.backgroundVideoIntensity = backgroundVideoIntensity;
   }
 
   await prisma.quiz.update({
@@ -221,6 +246,8 @@ export async function listActiveQuizzes() {
       backgroundVideoEnd: true,
       backgroundVideoLoop: true,
       backgroundVideoMuted: true,
+      backgroundImageIntensity: true,
+      backgroundVideoIntensity: true,
       _count: {
         select: {
           questions: true,
@@ -249,6 +276,8 @@ export async function listActiveQuizzes() {
     backgroundVideoEnd: quiz.backgroundVideoEnd ?? null,
     backgroundVideoLoop: quiz.backgroundVideoLoop ?? true,
     backgroundVideoMuted: quiz.backgroundVideoMuted ?? true,
+    backgroundImageIntensity: quiz.backgroundImageIntensity ?? 0.65,
+    backgroundVideoIntensity: quiz.backgroundVideoIntensity ?? 0.65,
   }));
 }
 
@@ -340,6 +369,8 @@ export async function getQuizByIdForAdmin(quizId) {
     backgroundVideoEnd: quiz.backgroundVideoEnd ?? null,
     backgroundVideoLoop: quiz.backgroundVideoLoop ?? true,
     backgroundVideoMuted: quiz.backgroundVideoMuted ?? true,
+    backgroundImageIntensity: quiz.backgroundImageIntensity ?? 0.65,
+    backgroundVideoIntensity: quiz.backgroundVideoIntensity ?? 0.65,
   };
 }
 
@@ -407,6 +438,8 @@ export async function getQuizForPlay(quizId) {
     backgroundVideoEnd: quiz.backgroundVideoEnd ?? null,
     backgroundVideoLoop: quiz.backgroundVideoLoop ?? true,
     backgroundVideoMuted: quiz.backgroundVideoMuted ?? true,
+    backgroundImageIntensity: quiz.backgroundImageIntensity ?? 0.65,
+    backgroundVideoIntensity: quiz.backgroundVideoIntensity ?? 0.65,
     questions: limitedQuestions.map((question) => ({
       id: question.id,
       text: question.text,

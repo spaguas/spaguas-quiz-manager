@@ -21,6 +21,11 @@ const optionSchema = z.object({
   isCorrect: z.boolean(),
 });
 
+const backgroundIntensitySchema = z
+  .number({ invalid_type_error: 'Informe um valor numérico.' })
+  .min(0.1, 'Informe um valor mínimo de 0.1')
+  .max(1, 'Informe um valor máximo de 1');
+
 export const quizCreateSchema = z
   .object({
     title: z.string().min(3, 'Título deve ter ao menos 3 caracteres'),
@@ -33,6 +38,8 @@ export const quizCreateSchema = z
     backgroundVideoEnd: nonNegativeInt.optional(),
     backgroundVideoLoop: z.boolean().optional().default(true),
     backgroundVideoMuted: z.boolean().optional().default(true),
+    backgroundImageIntensity: backgroundIntensitySchema.optional().default(0.65),
+    backgroundVideoIntensity: backgroundIntensitySchema.optional().default(0.65),
   })
   .superRefine((data, ctx) => {
     const hasVideo = Boolean(data.backgroundVideoUrl);
@@ -78,6 +85,8 @@ export const quizUpdateSchema = z
     backgroundVideoEnd: nonNegativeInt.optional().nullable(),
     backgroundVideoLoop: z.boolean().optional(),
     backgroundVideoMuted: z.boolean().optional(),
+    backgroundImageIntensity: backgroundIntensitySchema.optional(),
+    backgroundVideoIntensity: backgroundIntensitySchema.optional(),
   })
   .refine(
     (data) =>
@@ -90,7 +99,9 @@ export const quizUpdateSchema = z
       data.backgroundVideoStart !== undefined ||
       data.backgroundVideoEnd !== undefined ||
       data.backgroundVideoLoop !== undefined ||
-      data.backgroundVideoMuted !== undefined,
+      data.backgroundVideoMuted !== undefined ||
+      data.backgroundImageIntensity !== undefined ||
+      data.backgroundVideoIntensity !== undefined,
     { message: 'Informe ao menos um campo para atualizar', path: ['_root'] },
   )
   .superRefine((data, ctx) => {

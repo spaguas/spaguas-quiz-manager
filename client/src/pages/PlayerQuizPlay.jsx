@@ -335,7 +335,7 @@ const PlayerQuizPlay = () => {
                   value={userName}
                   onChange={(event) => setUserName(event.target.value)}
                 />
-              </div>
+              </div><br/>
               <div className="form-field">
                 <label htmlFor="user-email">E-mail</label>
                 <input
@@ -351,6 +351,15 @@ const PlayerQuizPlay = () => {
                 <button className="button" type="submit">
                   Iniciar quiz
                 </button>
+                
+                <button
+                  className="button secondary"
+                  type="button"
+                  onClick={() => navigate(`/play/quiz/${quizId}/ranking`)}
+                >
+                  Ver ranking completo
+                </button>
+
                 <button className="button ghost" type="button" onClick={() => navigate('/play')}>
                   Voltar
                 </button>

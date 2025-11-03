@@ -28,7 +28,8 @@ const sanitizeBasePath = (value) => {
   return withLeading.replace(/\/+$/, '');
 };
 
-const basePath = sanitizeBasePath(import.meta.env.VITE_BASE_PATH);
+const envBasePath = import.meta.env.VITE_BASE_PATH ?? '/quiz';
+const basePath = sanitizeBasePath(envBasePath) || '/quiz';
 
 const App = () => (
   <BrowserRouter basename={basePath}>

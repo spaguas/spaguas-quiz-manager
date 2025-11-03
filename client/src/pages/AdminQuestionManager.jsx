@@ -29,6 +29,11 @@ const AdminQuestionManager = () => {
     mode: 'SEQUENTIAL',
     questionUsage: 'ALL',
     questionLimit: '',
+    backgroundVideoUrl: '',
+    backgroundVideoStart: '0',
+    backgroundVideoEnd: '',
+    backgroundVideoLoop: true,
+    backgroundVideoMuted: true,
   });
   const [updatingQuiz, setUpdatingQuiz] = useState(false);
   const [quizError, setQuizError] = useState('');
@@ -126,12 +131,23 @@ const AdminQuestionManager = () => {
   useEffect(() => {
     if (quiz) {
       const hasLimit = quiz.questionLimit !== null && quiz.questionLimit !== undefined;
+      const hasVideo = Boolean(quiz.backgroundVideoUrl);
       setQuizDetails({
         title: quiz.title ?? '',
         description: quiz.description ?? '',
         mode: quiz.mode ?? 'SEQUENTIAL',
         questionUsage: hasLimit ? 'LIMITED' : 'ALL',
         questionLimit: hasLimit ? String(quiz.questionLimit) : '',
+        backgroundVideoUrl: quiz.backgroundVideoUrl ?? '',
+        backgroundVideoStart: hasVideo
+          ? String(quiz.backgroundVideoStart ?? 0)
+          : '',
+        backgroundVideoEnd:
+          hasVideo && quiz.backgroundVideoEnd !== null && quiz.backgroundVideoEnd !== undefined
+            ? String(quiz.backgroundVideoEnd)
+            : '',
+        backgroundVideoLoop: quiz.backgroundVideoLoop ?? true,
+        backgroundVideoMuted: quiz.backgroundVideoMuted ?? true,
       });
       setBackgroundFile(null);
       setHeaderFile(null);
@@ -158,6 +174,14 @@ const AdminQuestionManager = () => {
     setQuizDetails((prev) => ({
       ...prev,
       [field]: value,
+    }));
+  };
+
+  const handleQuizDetailCheckboxChange = (field) => (event) => {
+    const { checked } = event.target;
+    setQuizDetails((prev) => ({
+      ...prev,
+      [field]: checked,
     }));
   };
 
@@ -322,12 +346,75 @@ const AdminQuestionManager = () => {
 
     const currentMode = quiz?.mode ?? 'SEQUENTIAL';
     const currentLimit = quiz?.questionLimit ?? null;
+    const videoUrl = quizDetails.backgroundVideoUrl.trim();
+    const rawStart = quizDetails.backgroundVideoStart.trim();
+    const rawEnd = quizDetails.backgroundVideoEnd.trim();
+
+    let videoStartValue = null;
+    if (rawStart !== '') {
+      const parsedStart = Number(rawStart);
+      if (!Number.isFinite(parsedStart) || parsedStart < 0) {
+        setQuizError('Informe um tempo inicial válido (maior ou igual a 0).');
+        return;
+      }
+      videoStartValue = parsedStart;
+    }
+
+    let videoEndValue = null;
+    if (rawEnd !== '') {
+      const parsedEnd = Number(rawEnd);
+      if (!Number.isFinite(parsedEnd) || parsedEnd < 0) {
+        setQuizError('Informe um tempo final válido (maior ou igual a 0).');
+        return;
+      }
+      videoEndValue = parsedEnd;
+    }
+
+    const hasVideo = videoUrl.length > 0;
+
+    if (hasVideo) {
+      if (videoStartValue === null) {
+        videoStartValue = 0;
+      }
+      if (videoEndValue !== null && videoEndValue <= videoStartValue) {
+        setQuizError('Tempo final do vídeo deve ser maior que o tempo inicial.');
+        return;
+      }
+    } else {
+      videoStartValue = null;
+      videoEndValue = null;
+    }
+
+    const existingVideoUrl = quiz?.backgroundVideoUrl ?? null;
+    const existingVideoStart = existingVideoUrl ? (quiz?.backgroundVideoStart ?? 0) : null;
+    const existingVideoEnd = existingVideoUrl ? (quiz?.backgroundVideoEnd ?? null) : null;
+    const existingVideoLoop = quiz?.backgroundVideoLoop ?? true;
+    const existingVideoMuted = quiz?.backgroundVideoMuted ?? true;
+
+    const normalizedVideoUrl = hasVideo ? videoUrl : null;
+    const normalizedVideoStart = hasVideo ? (videoStartValue ?? 0) : null;
+    const normalizedVideoEnd = hasVideo ? (videoEndValue ?? null) : null;
+
+    const videoUrlChanged = normalizedVideoUrl !== existingVideoUrl;
+    const videoStartChanged = normalizedVideoStart !== existingVideoStart;
+    const videoEndChanged = normalizedVideoEnd !== existingVideoEnd;
+    const videoLoopChanged =
+      Boolean(existingVideoUrl || normalizedVideoUrl) &&
+      quizDetails.backgroundVideoLoop !== existingVideoLoop;
+    const videoMutedChanged =
+      Boolean(existingVideoUrl || normalizedVideoUrl) &&
+      quizDetails.backgroundVideoMuted !== existingVideoMuted;
 
     const hasChanges =
       trimmedTitle !== (quiz?.title ?? '') ||
       trimmedDescription !== (quiz?.description ?? '') ||
       quizDetails.mode !== currentMode ||
-      normalizedLimit !== currentLimit;
+      normalizedLimit !== currentLimit ||
+      videoUrlChanged ||
+      videoStartChanged ||
+      videoEndChanged ||
+      videoLoopChanged ||
+      videoMutedChanged;
 
     const hasImageChanges = Boolean(backgroundFile || headerFile);
 
@@ -351,6 +438,21 @@ const AdminQuestionManager = () => {
       }
       if (normalizedLimit !== currentLimit) {
         payload.questionLimit = normalizedLimit;
+      }
+      if (videoUrlChanged) {
+        payload.backgroundVideoUrl = normalizedVideoUrl;
+      }
+      if (videoUrlChanged || videoStartChanged) {
+        payload.backgroundVideoStart = normalizedVideoStart;
+      }
+      if (videoUrlChanged || videoEndChanged) {
+        payload.backgroundVideoEnd = normalizedVideoEnd;
+      }
+      if (videoUrlChanged || videoLoopChanged) {
+        payload.backgroundVideoLoop = quizDetails.backgroundVideoLoop;
+      }
+      if (videoUrlChanged || videoMutedChanged) {
+        payload.backgroundVideoMuted = quizDetails.backgroundVideoMuted;
       }
 
       let latestQuizData = quiz;
@@ -519,6 +621,8 @@ const AdminQuestionManager = () => {
     return <div className="page-error">Quiz não encontrado.</div>;
   }
 
+  const videoSettingsDisabled = quizDetails.backgroundVideoUrl.trim().length === 0;
+
   return (
     <div className="grid">
       <div className="page-title">
@@ -604,6 +708,66 @@ const AdminQuestionManager = () => {
             </small>
           </div>
         )}
+        <div className="form-field">
+          <label htmlFor="quiz-background-video-url">Vídeo de fundo (YouTube)</label>
+          <input
+            id="quiz-background-video-url"
+            type="url"
+            value={quizDetails.backgroundVideoUrl}
+            onChange={handleQuizDetailChange('backgroundVideoUrl')}
+            placeholder="https://www.youtube.com/watch?v=..."
+          />
+          <small style={{ color: '#64748b' }}>
+            Informe uma URL do YouTube para usar como plano de fundo animado. O vídeo será exibido sem controles.
+          </small>
+        </div>
+        <div className="form-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
+          <div className="form-field">
+            <label htmlFor="quiz-background-video-start">Início do trecho (segundos)</label>
+            <input
+              id="quiz-background-video-start"
+              type="number"
+              min="0"
+              value={quizDetails.backgroundVideoStart}
+              onChange={handleQuizDetailChange('backgroundVideoStart')}
+              placeholder="Ex.: 0"
+              disabled={videoSettingsDisabled}
+            />
+          </div>
+          <div className="form-field">
+            <label htmlFor="quiz-background-video-end">Fim do trecho (segundos)</label>
+            <input
+              id="quiz-background-video-end"
+              type="number"
+              min="0"
+              value={quizDetails.backgroundVideoEnd}
+              onChange={handleQuizDetailChange('backgroundVideoEnd')}
+              placeholder="Ex.: 30"
+              disabled={videoSettingsDisabled}
+            />
+            <small style={{ color: '#64748b' }}>Deixe em branco para reproduzir até o final.</small>
+          </div>
+        </div>
+        <div className="checkbox-field">
+          <input
+            id="quiz-background-video-loop"
+            type="checkbox"
+            checked={quizDetails.backgroundVideoLoop}
+            onChange={handleQuizDetailCheckboxChange('backgroundVideoLoop')}
+            disabled={videoSettingsDisabled}
+          />
+          <label htmlFor="quiz-background-video-loop">Repetir vídeo em loop</label>
+        </div>
+        <div className="checkbox-field">
+          <input
+            id="quiz-background-video-muted"
+            type="checkbox"
+            checked={quizDetails.backgroundVideoMuted}
+            onChange={handleQuizDetailCheckboxChange('backgroundVideoMuted')}
+            disabled={videoSettingsDisabled}
+          />
+          <label htmlFor="quiz-background-video-muted">Reproduzir vídeo sem áudio</label>
+        </div>
         <div className="form-field">
           <label htmlFor="quiz-background-image">Imagem de fundo do quiz (PNG até 10MB)</label>
           <div className="image-upload-panel">

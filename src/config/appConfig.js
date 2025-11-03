@@ -1,9 +1,22 @@
-const rawBasePath = process.env.APP_BASE_PATH?.trim() ?? '';
+const normalizeBasePath = (value) => {
+  if (!value) {
+    return '';
+  }
 
-let basePath = rawBasePath;
-if (basePath !== '') {
-  basePath = basePath.startsWith('/') ? basePath : `/${basePath}`;
-  basePath = basePath.replace(/\/+$/, '');
+  const trimmed = value.trim();
+  if (!trimmed || trimmed === '/') {
+    return '';
+  }
+
+  const withLeading = trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
+  return withLeading.replace(/\/+$/, '');
+};
+
+const envBasePath = process.env.APP_BASE_PATH ?? '';
+let basePath = normalizeBasePath(envBasePath);
+
+if (!basePath) {
+  basePath = '/quiz';
 }
 
 let publicUrl = process.env.APP_PUBLIC_URL?.trim() ?? '';

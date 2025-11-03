@@ -39,8 +39,15 @@ export async function createQuiz({
   isActive = true,
   mode = 'SEQUENTIAL',
   questionLimit = null,
+  backgroundVideoUrl = null,
+  backgroundVideoStart = null,
+  backgroundVideoEnd = null,
+  backgroundVideoLoop = true,
+  backgroundVideoMuted = true,
 }) {
   const normalizedLimit = questionLimit ?? null;
+  const normalizedVideoUrl = backgroundVideoUrl ? backgroundVideoUrl.trim() : null;
+  const hasVideo = Boolean(normalizedVideoUrl);
 
   return prisma.quiz.create({
     data: {
@@ -51,11 +58,16 @@ export async function createQuiz({
       questionLimit: normalizedLimit,
       backgroundImage: null,
       headerImage: null,
+      backgroundVideoUrl: normalizedVideoUrl,
+      backgroundVideoStart: hasVideo ? backgroundVideoStart ?? 0 : null,
+      backgroundVideoEnd: hasVideo ? backgroundVideoEnd ?? null : null,
+      backgroundVideoLoop: backgroundVideoLoop ?? true,
+      backgroundVideoMuted: backgroundVideoMuted ?? true,
     },
   });
 }
 
-export async function updateQuiz(quizId, { title, description, isActive, mode, questionLimit }) {
+export async function updateQuiz(quizId, { title, description, isActive, mode, questionLimit, backgroundVideoUrl, backgroundVideoStart, backgroundVideoEnd, backgroundVideoLoop, backgroundVideoMuted }) {
   const quiz = await prisma.quiz.findUnique({
     where: { id: quizId },
     select: { id: true },
@@ -65,15 +77,42 @@ export async function updateQuiz(quizId, { title, description, isActive, mode, q
     throw new HttpError(404, 'Quiz não encontrado');
   }
 
+  const data = {
+    ...(title !== undefined ? { title } : {}),
+    ...(description !== undefined ? { description } : {}),
+    ...(isActive !== undefined ? { isActive } : {}),
+    ...(mode !== undefined ? { mode } : {}),
+    ...(questionLimit !== undefined ? { questionLimit: questionLimit ?? null } : {}),
+  };
+
+  if (backgroundVideoUrl !== undefined) {
+    const normalizedVideoUrl = backgroundVideoUrl ? backgroundVideoUrl.trim() : null;
+    data.backgroundVideoUrl = normalizedVideoUrl;
+    if (normalizedVideoUrl === null) {
+      data.backgroundVideoStart = null;
+      data.backgroundVideoEnd = null;
+    }
+  }
+
+  if (backgroundVideoStart !== undefined) {
+    data.backgroundVideoStart = backgroundVideoStart === null ? null : backgroundVideoStart;
+  }
+
+  if (backgroundVideoEnd !== undefined) {
+    data.backgroundVideoEnd = backgroundVideoEnd ?? null;
+  }
+
+  if (backgroundVideoLoop !== undefined) {
+    data.backgroundVideoLoop = backgroundVideoLoop;
+  }
+
+  if (backgroundVideoMuted !== undefined) {
+    data.backgroundVideoMuted = backgroundVideoMuted;
+  }
+
   await prisma.quiz.update({
     where: { id: quizId },
-    data: {
-      ...(title !== undefined ? { title } : {}),
-      ...(description !== undefined ? { description } : {}),
-      ...(isActive !== undefined ? { isActive } : {}),
-      ...(mode !== undefined ? { mode } : {}),
-      ...(questionLimit !== undefined ? { questionLimit: questionLimit ?? null } : {}),
-    },
+    data,
   });
 
   return getQuizByIdForAdmin(quizId);
@@ -177,6 +216,11 @@ export async function listActiveQuizzes() {
       questionLimit: true,
       backgroundImage: true,
       headerImage: true,
+      backgroundVideoUrl: true,
+      backgroundVideoStart: true,
+      backgroundVideoEnd: true,
+      backgroundVideoLoop: true,
+      backgroundVideoMuted: true,
       _count: {
         select: {
           questions: true,
@@ -200,6 +244,11 @@ export async function listActiveQuizzes() {
     submissionCount: quiz._count.submissions,
     backgroundImageUrl: buildPublicUrl(quiz.backgroundImage),
     headerImageUrl: buildPublicUrl(quiz.headerImage),
+    backgroundVideoUrl: quiz.backgroundVideoUrl || null,
+    backgroundVideoStart: quiz.backgroundVideoStart ?? 0,
+    backgroundVideoEnd: quiz.backgroundVideoEnd ?? null,
+    backgroundVideoLoop: quiz.backgroundVideoLoop ?? true,
+    backgroundVideoMuted: quiz.backgroundVideoMuted ?? true,
   }));
 }
 
@@ -286,6 +335,11 @@ export async function getQuizByIdForAdmin(quizId) {
     ...quiz,
     backgroundImageUrl: buildPublicUrl(quiz.backgroundImage),
     headerImageUrl: buildPublicUrl(quiz.headerImage),
+    backgroundVideoUrl: quiz.backgroundVideoUrl || null,
+    backgroundVideoStart: quiz.backgroundVideoStart ?? 0,
+    backgroundVideoEnd: quiz.backgroundVideoEnd ?? null,
+    backgroundVideoLoop: quiz.backgroundVideoLoop ?? true,
+    backgroundVideoMuted: quiz.backgroundVideoMuted ?? true,
   };
 }
 
@@ -348,6 +402,11 @@ export async function getQuizForPlay(quizId) {
     questionLimit: quiz.questionLimit,
     backgroundImageUrl: buildPublicUrl(quiz.backgroundImage),
     headerImageUrl: buildPublicUrl(quiz.headerImage),
+    backgroundVideoUrl: quiz.backgroundVideoUrl || null,
+    backgroundVideoStart: quiz.backgroundVideoStart ?? 0,
+    backgroundVideoEnd: quiz.backgroundVideoEnd ?? null,
+    backgroundVideoLoop: quiz.backgroundVideoLoop ?? true,
+    backgroundVideoMuted: quiz.backgroundVideoMuted ?? true,
     questions: limitedQuestions.map((question) => ({
       id: question.id,
       text: question.text,
@@ -395,6 +454,36 @@ export async function validateQuestionAnswer({ quizId, questionId, optionId }) {
     optionId,
     isCorrect: option.isCorrect,
   };
+}
+
+export async function validateParticipation({ quizId, userEmail }) {
+  const quiz = await prisma.quiz.findUnique({
+    where: { id: quizId },
+    select: { id: true, isActive: true },
+  });
+
+  if (!quiz || !quiz.isActive) {
+    throw new HttpError(404, 'Quiz não encontrado ou inativo');
+  }
+
+  const normalizedEmail = (userEmail || '').trim().toLowerCase();
+  if (!normalizedEmail) {
+    throw new HttpError(400, 'Informe um e-mail válido');
+  }
+
+  const existingSubmission = await prisma.submission.findFirst({
+    where: {
+      quizId,
+      userEmail: normalizedEmail,
+    },
+    select: { id: true },
+  });
+
+  if (existingSubmission) {
+    throw new HttpError(409, 'Este e-mail já participou deste quiz');
+  }
+
+  return { allowed: true };
 }
 
 export async function createSubmission({ quizId, userName, userEmail, answers }, actor = null) {

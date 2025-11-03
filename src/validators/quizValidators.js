@@ -2,36 +2,131 @@ import { z } from 'zod';
 
 const quizModeSchema = z.enum(['SEQUENTIAL', 'RANDOM']);
 
-const questionLimitSchema = z.number().int().min(1, 'Informe uma quantidade de perguntas maior que zero').nullable();
+export const youtubeUrlSchema = z
+  .string()
+  .trim()
+  .url('Informe uma URL válida')
+  .refine((value) => /youtu\.be|youtube\.com/.test(value), 'Informe uma URL do YouTube válida');
 
-export const quizCreateSchema = z.object({
-  title: z.string().min(3, 'Título deve ter ao menos 3 caracteres'),
-  description: z.string().min(5, 'Descrição deve ter ao menos 5 caracteres'),
-  isActive: z.boolean().optional().default(true),
-  mode: quizModeSchema.default('SEQUENTIAL'),
-  questionLimit: questionLimitSchema.optional(),
-});
+const nonNegativeInt = z.number().int().min(0, 'Informe um valor maior ou igual a zero');
 
-export const quizUpdateSchema = z.object({
-  title: z.string().min(3, 'Título deve ter ao menos 3 caracteres').optional(),
-  description: z.string().min(5, 'Descrição deve ter ao menos 5 caracteres').optional(),
-  isActive: z.boolean().optional(),
-  mode: quizModeSchema.optional(),
-  questionLimit: questionLimitSchema.optional(),
-}).refine(
-  (data) =>
-    data.title !== undefined ||
-    data.description !== undefined ||
-    data.isActive !== undefined ||
-    data.mode !== undefined ||
-    data.questionLimit !== undefined,
-  { message: 'Informe ao menos um campo para atualizar', path: ['_root'] },
-);
+const questionLimitSchema = z
+  .number()
+  .int()
+  .min(1, 'Informe uma quantidade de perguntas maior que zero')
+  .nullable();
 
 const optionSchema = z.object({
   text: z.string().min(1, 'Alternativa deve ter texto'),
   isCorrect: z.boolean(),
 });
+
+export const quizCreateSchema = z
+  .object({
+    title: z.string().min(3, 'Título deve ter ao menos 3 caracteres'),
+    description: z.string().min(5, 'Descrição deve ter ao menos 5 caracteres'),
+    isActive: z.boolean().optional().default(true),
+    mode: quizModeSchema.default('SEQUENTIAL'),
+    questionLimit: questionLimitSchema.optional(),
+    backgroundVideoUrl: youtubeUrlSchema.optional(),
+    backgroundVideoStart: nonNegativeInt.optional(),
+    backgroundVideoEnd: nonNegativeInt.optional(),
+    backgroundVideoLoop: z.boolean().optional().default(true),
+    backgroundVideoMuted: z.boolean().optional().default(true),
+  })
+  .superRefine((data, ctx) => {
+    const hasVideo = Boolean(data.backgroundVideoUrl);
+    if (!hasVideo) {
+      if (data.backgroundVideoStart !== undefined) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'Informe uma URL de vídeo para definir o tempo inicial.',
+          path: ['backgroundVideoStart'],
+        });
+      }
+      if (data.backgroundVideoEnd !== undefined) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'Informe uma URL de vídeo para definir o tempo final.',
+          path: ['backgroundVideoEnd'],
+        });
+      }
+    }
+
+    if (
+      data.backgroundVideoEnd !== undefined &&
+      data.backgroundVideoStart !== undefined &&
+      data.backgroundVideoEnd <= data.backgroundVideoStart
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Tempo final deve ser maior que o tempo inicial.',
+        path: ['backgroundVideoEnd'],
+      });
+    }
+  });
+
+export const quizUpdateSchema = z
+  .object({
+    title: z.string().min(3, 'Título deve ter ao menos 3 caracteres').optional(),
+    description: z.string().min(5, 'Descrição deve ter ao menos 5 caracteres').optional(),
+    isActive: z.boolean().optional(),
+    mode: quizModeSchema.optional(),
+    questionLimit: questionLimitSchema.optional(),
+    backgroundVideoUrl: youtubeUrlSchema.optional().nullable(),
+    backgroundVideoStart: nonNegativeInt.optional().nullable(),
+    backgroundVideoEnd: nonNegativeInt.optional().nullable(),
+    backgroundVideoLoop: z.boolean().optional(),
+    backgroundVideoMuted: z.boolean().optional(),
+  })
+  .refine(
+    (data) =>
+      data.title !== undefined ||
+      data.description !== undefined ||
+      data.isActive !== undefined ||
+      data.mode !== undefined ||
+      data.questionLimit !== undefined ||
+      data.backgroundVideoUrl !== undefined ||
+      data.backgroundVideoStart !== undefined ||
+      data.backgroundVideoEnd !== undefined ||
+      data.backgroundVideoLoop !== undefined ||
+      data.backgroundVideoMuted !== undefined,
+    { message: 'Informe ao menos um campo para atualizar', path: ['_root'] },
+  )
+  .superRefine((data, ctx) => {
+    const hasVideoUrl =
+      data.backgroundVideoUrl !== undefined ? Boolean(data.backgroundVideoUrl) : undefined;
+
+    if (data.backgroundVideoStart !== undefined && data.backgroundVideoStart !== null && hasVideoUrl === false) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Informe ou mantenha uma URL de vídeo para definir o tempo inicial.',
+        path: ['backgroundVideoStart'],
+      });
+    }
+
+    if (data.backgroundVideoEnd !== undefined && data.backgroundVideoEnd !== null && hasVideoUrl === false) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Informe ou mantenha uma URL de vídeo para definir o tempo final.',
+        path: ['backgroundVideoEnd'],
+      });
+    }
+
+    if (
+      data.backgroundVideoEnd !== undefined &&
+      data.backgroundVideoEnd !== null &&
+      data.backgroundVideoStart !== undefined &&
+      data.backgroundVideoStart !== null &&
+      data.backgroundVideoEnd <= data.backgroundVideoStart
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Tempo final deve ser maior que o tempo inicial.',
+        path: ['backgroundVideoEnd'],
+      });
+    }
+  });
 
 export const questionCreateSchema = z.object({
   quizId: z.number().int().positive(),
@@ -59,4 +154,10 @@ export const answerValidationSchema = z.object({
   quizId: z.number().int().positive(),
   questionId: z.number().int().positive(),
   optionId: z.number().int().positive(),
+});
+
+export const participationCheckSchema = z.object({
+  quizId: z.number().int().positive(),
+  userEmail: z.string().trim().email('Informe um e-mail válido'),
+  userName: z.string().trim().optional(),
 });

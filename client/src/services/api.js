@@ -13,7 +13,8 @@ const sanitizeBasePath = (value) => {
   return withLeading.replace(/\/+$/, '');
 };
 
-const basePathNormalized = sanitizeBasePath(import.meta.env.VITE_BASE_PATH);
+const envBasePath = import.meta.env.VITE_BASE_PATH ?? '/quiz';
+const basePathNormalized = sanitizeBasePath(envBasePath) || '/quiz';
 const defaultApiBase = `${basePathNormalized}/api`.replace(/\/{2,}/g, '/') || '/api';
 const apiBaseURL = import.meta.env.VITE_API_URL || defaultApiBase;
 
@@ -21,6 +22,9 @@ const api = axios.create({
   baseURL: apiBaseURL,
   timeout: 10000,
 });
+
+const adminRoutePrefix = basePathNormalized ? `${basePathNormalized}/admin` : '/admin';
+const adminLoginPath = basePathNormalized ? `${basePathNormalized}/admin/login` : '/admin/login';
 
 api.interceptors.request.use((config) => {
   if (typeof window !== 'undefined') {
@@ -46,8 +50,8 @@ api.interceptors.response.use(
       const status = error.response?.status;
       if (status === 401 || status === 403) {
         window.localStorage.removeItem(AUTH_STORAGE_KEY);
-        if (window.location.pathname.startsWith('/admin')) {
-          window.location.href = '/admin/login';
+        if (window.location.pathname.startsWith(adminRoutePrefix)) {
+          window.location.href = adminLoginPath;
         }
       }
     }

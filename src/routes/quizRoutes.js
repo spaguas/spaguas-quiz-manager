@@ -11,6 +11,7 @@ import {
   listActiveQuizzes,
   getQuizForPlay,
   validateQuestionAnswer,
+  validateParticipation,
   createSubmission,
   getRanking,
   getDashboardSummary,
@@ -46,6 +47,7 @@ router.delete('/admin/quizzes/:quizId/ranking', authenticate, requireAdmin, clea
 router.get('/quizzes', listActiveQuizzes);
 router.get('/quizzes/:quizId', getQuizForPlay);
 router.post('/quizzes/:quizId/questions/:questionId/validate', validateQuestionAnswer);
+router.post('/quizzes/:quizId/validate-participation', validateParticipation);
 router.post('/quizzes/:quizId/submissions', createSubmission);
 router.get('/quizzes/:quizId/ranking', getRanking);
 

@@ -5,6 +5,7 @@ import {
   questionCreateSchema,
   submissionSchema,
   answerValidationSchema,
+  participationCheckSchema,
 } from '../validators/quizValidators.js';
 
 export async function createQuiz(req, res, next) {
@@ -122,6 +123,21 @@ export async function getQuizForPlay(req, res, next) {
       return res.status(404).json({ message: 'Quiz não encontrado' });
     }
     return res.json(quiz);
+  } catch (error) {
+    return next(error);
+  }
+}
+
+
+export async function validateParticipation(req, res, next) {
+  try {
+    const payload = participationCheckSchema.parse({
+      ...req.body,
+      quizId: Number(req.params.quizId),
+    });
+
+    const result = await quizService.validateParticipation(payload);
+    return res.json(result);
   } catch (error) {
     return next(error);
   }

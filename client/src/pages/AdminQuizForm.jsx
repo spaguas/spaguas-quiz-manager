@@ -11,6 +11,11 @@ const AdminQuizForm = () => {
     mode: 'SEQUENTIAL',
     questionUsage: 'ALL',
     questionLimit: '',
+    backgroundVideoUrl: '',
+    backgroundVideoStart: '0',
+    backgroundVideoEnd: '',
+    backgroundVideoLoop: true,
+    backgroundVideoMuted: true,
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -60,12 +65,56 @@ const AdminQuizForm = () => {
       }
     }
 
+    const videoUrl = form.backgroundVideoUrl.trim();
+    const hasVideo = videoUrl.length > 0;
+    const rawStart = form.backgroundVideoStart.trim();
+    const rawEnd = form.backgroundVideoEnd.trim();
+
+    let videoStartValue = null;
+    if (rawStart !== '') {
+      const parsedStart = Number(rawStart);
+      if (!Number.isFinite(parsedStart) || parsedStart < 0) {
+        setError('Informe um tempo inicial válido (maior ou igual a 0).');
+        return;
+      }
+      videoStartValue = parsedStart;
+    }
+
+    let videoEndValue = null;
+    if (rawEnd !== '') {
+      const parsedEnd = Number(rawEnd);
+      if (!Number.isFinite(parsedEnd) || parsedEnd < 0) {
+        setError('Informe um tempo final válido (maior ou igual a 0).');
+        return;
+      }
+      videoEndValue = parsedEnd;
+    }
+
+    if (hasVideo) {
+      if (videoStartValue === null) {
+        videoStartValue = 0;
+      }
+
+      if (videoEndValue !== null && videoEndValue <= videoStartValue) {
+        setError('Tempo final do vídeo deve ser maior que o tempo inicial.');
+        return;
+      }
+    } else {
+      videoStartValue = null;
+      videoEndValue = null;
+    }
+
     const payload = {
       title: trimmedTitle,
       description: trimmedDescription,
       isActive: form.isActive,
       mode: form.mode,
       questionLimit: wantsLimit ? parsedLimit : null,
+      backgroundVideoUrl: hasVideo ? videoUrl : null,
+      backgroundVideoStart: hasVideo ? videoStartValue ?? 0 : null,
+      backgroundVideoEnd: hasVideo ? videoEndValue ?? null : null,
+      backgroundVideoLoop: form.backgroundVideoLoop,
+      backgroundVideoMuted: form.backgroundVideoMuted,
     };
 
     try {
@@ -81,6 +130,8 @@ const AdminQuizForm = () => {
       setLoading(false);
     }
   };
+
+  const videoSettingsDisabled = form.backgroundVideoUrl.trim().length === 0;
 
   return (
     <div className="grid">
@@ -157,6 +208,73 @@ const AdminQuizForm = () => {
             />
           </div>
         )}
+
+        <div className="form-field">
+          <label htmlFor="backgroundVideoUrl">Vídeo de fundo (YouTube)</label>
+          <input
+            id="backgroundVideoUrl"
+            name="backgroundVideoUrl"
+            type="url"
+            placeholder="https://www.youtube.com/watch?v=..."
+            value={form.backgroundVideoUrl}
+            onChange={handleChange}
+          />
+          <small style={{ color: '#64748b' }}>
+            Informe uma URL do YouTube para usar como plano de fundo animado. O vídeo será exibido sem controles.
+          </small>
+        </div>
+
+        <div className="form-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
+          <div className="form-field">
+            <label htmlFor="backgroundVideoStart">Início do trecho (segundos)</label>
+            <input
+              id="backgroundVideoStart"
+              name="backgroundVideoStart"
+              type="number"
+              min="0"
+              value={form.backgroundVideoStart}
+              onChange={handleChange}
+              disabled={videoSettingsDisabled}
+            />
+          </div>
+          <div className="form-field">
+            <label htmlFor="backgroundVideoEnd">Fim do trecho (segundos)</label>
+            <input
+              id="backgroundVideoEnd"
+              name="backgroundVideoEnd"
+              type="number"
+              min="0"
+              value={form.backgroundVideoEnd}
+              onChange={handleChange}
+              disabled={videoSettingsDisabled}
+            />
+            <small style={{ color: '#64748b' }}>Deixe em branco para reproduzir até o final.</small>
+          </div>
+        </div>
+
+        <div className="checkbox-field">
+          <input
+            id="backgroundVideoLoop"
+            name="backgroundVideoLoop"
+            type="checkbox"
+            checked={form.backgroundVideoLoop}
+            onChange={handleChange}
+            disabled={videoSettingsDisabled}
+          />
+          <label htmlFor="backgroundVideoLoop">Repetir vídeo em loop</label>
+        </div>
+
+        <div className="checkbox-field">
+          <input
+            id="backgroundVideoMuted"
+            name="backgroundVideoMuted"
+            type="checkbox"
+            checked={form.backgroundVideoMuted}
+            onChange={handleChange}
+            disabled={videoSettingsDisabled}
+          />
+          <label htmlFor="backgroundVideoMuted">Reproduzir vídeo sem áudio</label>
+        </div>
 
         <div className="checkbox-field">
           <input

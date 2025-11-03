@@ -4,6 +4,80 @@ import api from '../services/api.js';
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+const extractYouTubeVideoId = (url) => {
+  if (!url) {
+    return null;
+  }
+
+  try {
+    const parsed = new URL(url);
+    const host = parsed.hostname.replace(/^www\./i, '').toLowerCase();
+
+    if (host === 'youtu.be') {
+      return parsed.pathname.slice(1);
+    }
+
+    if (host === 'youtube.com' || host.endsWith('.youtube.com')) {
+      if (parsed.searchParams.has('v')) {
+        return parsed.searchParams.get('v');
+      }
+
+      const embedMatch = parsed.pathname.match(/\/embed\/([^/?]+)/);
+      if (embedMatch) {
+        return embedMatch[1];
+      }
+
+      const shortsMatch = parsed.pathname.match(/\/shorts\/([^/?]+)/);
+      if (shortsMatch) {
+        return shortsMatch[1];
+      }
+    }
+  } catch (error) {
+    return null;
+  }
+
+  return null;
+};
+
+const buildYouTubeBackgroundUrl = (url, { start, end, loop, muted }) => {
+  const videoId = extractYouTubeVideoId(url);
+  if (!videoId) {
+    return null;
+  }
+
+  const params = new URLSearchParams({
+    autoplay: '1',
+    controls: '0',
+    modestbranding: '1',
+    rel: '0',
+    showinfo: '0',
+    disablekb: '1',
+    playsinline: '1',
+    fs: '0',
+    iv_load_policy: '3',
+    cc_load_policy: '0',
+    autohide: '1',
+    mute: muted ? '1' : '0',
+  });
+
+  if (typeof start === 'number' && start >= 0) {
+    params.set('start', String(Math.floor(start)));
+  }
+
+  if (typeof end === 'number' && end > 0) {
+    params.set('end', String(Math.floor(end)));
+  }
+
+  if (loop) {
+    params.set('loop', '1');
+    params.set('playlist', videoId);
+  } else {
+    params.set('loop', '0');
+  }
+
+  return `https://www.youtube.com/embed/${videoId}?${params.toString()}`;
+};
+
 const PlayerQuizPlay = () => {
   const { quizId } = useParams();
   const navigate = useNavigate();
@@ -23,6 +97,18 @@ const PlayerQuizPlay = () => {
   const [result, setResult] = useState(null);
   const [quizCompleted, setQuizCompleted] = useState(false);
   const [backgroundLoaded, setBackgroundLoaded] = useState(false);
+  const [videoReady, setVideoReady] = useState(false);
+  const [checkingParticipation, setCheckingParticipation] = useState(false);
+
+  const backgroundVideoUrl = quiz?.backgroundVideoUrl ?? null;
+  const videoEmbedUrl = backgroundVideoUrl
+    ? buildYouTubeBackgroundUrl(backgroundVideoUrl, {
+        start: quiz?.backgroundVideoStart ?? 0,
+        end: quiz?.backgroundVideoEnd ?? null,
+        loop: quiz?.backgroundVideoLoop ?? true,
+        muted: quiz?.backgroundVideoMuted ?? true,
+      })
+    : null;
 
   useEffect(() => {
     const fetchQuiz = async () => {
@@ -65,7 +151,9 @@ const PlayerQuizPlay = () => {
   }, [currentQuestionIndex]);
 
   useEffect(() => {
-    if (quiz?.backgroundImageUrl) {
+    const shouldUseImage = Boolean(quiz?.backgroundImageUrl) && !backgroundVideoUrl;
+
+    if (shouldUseImage) {
       setBackgroundLoaded(false);
       const image = new Image();
       image.src = quiz.backgroundImageUrl;
@@ -79,7 +167,15 @@ const PlayerQuizPlay = () => {
 
     setBackgroundLoaded(true);
     return undefined;
-  }, [quiz?.backgroundImageUrl]);
+  }, [quiz?.backgroundImageUrl, backgroundVideoUrl]);
+
+  useEffect(() => {
+    if (videoEmbedUrl) {
+      setVideoReady(false);
+    } else {
+      setVideoReady(true);
+    }
+  }, [videoEmbedUrl]);
 
   const currentQuestion = quiz?.questions?.[currentQuestionIndex] ?? null;
   const currentResponse = currentQuestion ? responses[currentQuestion.id] : null;
@@ -138,7 +234,7 @@ const PlayerQuizPlay = () => {
     setQuestionError('');
   };
 
-  const handleStartQuiz = (event) => {
+  const handleStartQuiz = async (event) => {
     event.preventDefault();
     if (!quiz) {
       return;
@@ -156,6 +252,19 @@ const PlayerQuizPlay = () => {
     if (!trimmedEmail || !emailRegex.test(trimmedEmail)) {
       setIdentificationError('Informe um e-mail válido.');
       return;
+    }
+
+    try {
+      setCheckingParticipation(true);
+      await api.post(`/quizzes/${quizId}/validate-participation`, {
+        userName: trimmedName,
+        userEmail: trimmedEmail,
+      });
+    } catch (err) {
+      setIdentificationError(err.response?.data?.message || 'Você já participou deste quiz.');
+      return;
+    } finally {
+      setCheckingParticipation(false);
     }
 
     setUserName(trimmedName);
@@ -280,16 +389,34 @@ const PlayerQuizPlay = () => {
     return <div className="page-error">Quiz indisponível.</div>;
   }
 
+  const hasBackgroundImage = Boolean(quiz.backgroundImageUrl);
+  const hasBackgroundVideo = Boolean(videoEmbedUrl);
+  const showBackgroundImage = hasBackgroundImage && !hasBackgroundVideo;
+  const hasBackground = hasBackgroundVideo || showBackgroundImage;
+
   const confirmDisabled =
     !currentResponse?.selectedOptionId || currentResponse?.isConfirmed || validating || quizCompleted;
   const nextDisabled = !currentResponse?.isConfirmed || quizCompleted;
   const submitDisabled = submitting || quizCompleted;
   const submitLabel = submitting ? 'Enviando...' : quizCompleted ? 'Quiz finalizado' : 'Enviar respostas';
-  const hasBackground = Boolean(quiz.backgroundImageUrl);
 
   return (
     <div className={`quiz-play-wrapper ${hasBackground ? 'has-background' : ''}`}>
-      {hasBackground && (
+      {hasBackgroundVideo && videoEmbedUrl && (
+        <div className={`quiz-video-layer ${videoReady ? 'loaded' : ''}`}>
+          <iframe
+            key={videoEmbedUrl}
+            src={videoEmbedUrl}
+            title="Plano de fundo do quiz"
+            allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
+            allowFullScreen
+            frameBorder="0"
+            referrerPolicy="no-referrer-when-downgrade"
+            onLoad={() => setVideoReady(true)}
+          />
+        </div>
+      )}
+      {showBackgroundImage && (
         <div
           className={`quiz-background-layer ${backgroundLoaded ? 'loaded' : ''}`}
           style={{ backgroundImage: `url(${quiz.backgroundImageUrl})` }}
@@ -348,10 +475,9 @@ const PlayerQuizPlay = () => {
               </div>
               {identificationError && <div className="page-error" style={{ margin: 0 }}>{identificationError}</div>}
               <div className="form-actions">
-                <button className="button" type="submit">
-                  Iniciar quiz
+                <button className="button" type="submit" disabled={checkingParticipation}>
+                  {checkingParticipation ? 'Verificando...' : 'Iniciar quiz'}
                 </button>
-                
                 <button
                   className="button secondary"
                   type="button"
@@ -359,7 +485,6 @@ const PlayerQuizPlay = () => {
                 >
                   Ver ranking completo
                 </button>
-
                 <button className="button ghost" type="button" onClick={() => navigate('/play')}>
                   Voltar
                 </button>
@@ -387,17 +512,25 @@ const PlayerQuizPlay = () => {
                         className={`wizard-step ${statusClass} ${isActive ? 'active' : ''}`}
                         onClick={() => handleGoToQuestion(index)}
                         disabled={!canNavigateTo(index)}
+                        aria-label={`Pergunta ${index + 1}`}
                       >
-                        <span className="wizard-step-index">{index + 1}</span>
                         <span className="wizard-step-label">
-                          {response?.isConfirmed ? (response.isCorrect ? 'Correta' : 'Errada') : 'Pendente'}
+                          {response?.isConfirmed ? (
+                            response.isCorrect ? (
+                              <span aria-hidden="true" className="wizard-icon success">✓</span>
+                            ) : (
+                              <span aria-hidden="true" className="wizard-icon danger">✕</span>
+                            )
+                          ) : (
+                            <span className="wizard-step-index">{index + 1}</span>
+                          )}
                         </span>
                       </button>
                     );
                   })}
                 </div>
               </div>
-
+              <br/>
               <div className={`card wizard-question ${answerStatus ? `status-${answerStatus}` : ''}`}>
                 <div className="wizard-question-header">
                   <span className="wizard-question-index">
@@ -435,7 +568,7 @@ const PlayerQuizPlay = () => {
                 {answerStatus === 'incorrect' && (
                   <div className="answer-feedback danger">Resposta incorreta. Continue tentando nas próximas!</div>
                 )}
-                {questionError && <div className="page-error" style={{ marginTop: '1rem' }}>{questionError}</div>}
+                {questionError && <div className="card page-error" style={{ marginTop: '2rem' }}>{questionError}</div>}
                 <div className="wizard-actions">
                   <button
                     className="button ghost"
@@ -463,10 +596,10 @@ const PlayerQuizPlay = () => {
                 </div>
               </div>
 
-              {submissionError && <div className="page-error">{submissionError}</div>}
+              {submissionError && <div className="page-error"><span style={{ fontSize: '12px' }} className="tag danger">{submissionError}</span></div>}
             </>
           )}
-
+          <br/>
           {quizCompleted && !result && (
             <div className="card">
               <h2>Resultado</h2>

@@ -1,6 +1,7 @@
 import multer from 'multer';
 import path from 'node:path';
 import fs from 'node:fs';
+import { maxUploadSizeBytes } from '../config/uploadConfig.js';
 
 const uploadsRoot = path.resolve(process.cwd(), 'uploads');
 const quizUploadsRoot = path.join(uploadsRoot, 'quizzes');
@@ -36,7 +37,7 @@ const uploadQuizImages = multer({
   storage,
   fileFilter,
   limits: {
-    fileSize: 10 * 1024 * 1024, // 10MB
+    fileSize: maxUploadSizeBytes,
   },
 });
 

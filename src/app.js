@@ -10,11 +10,13 @@ import userRouter from './routes/userRoutes.js';
 import gamificationRouter from './routes/gamificationRoutes.js';
 import errorHandler from './middlewares/errorHandler.js';
 import appConfig from './config/appConfig.js';
+import { requestSizeLimit } from './config/uploadConfig.js';
 
 const app = express();
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: requestSizeLimit }));
+app.use(express.urlencoded({ extended: true, limit: requestSizeLimit }));
 app.use(morgan('dev'));
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));

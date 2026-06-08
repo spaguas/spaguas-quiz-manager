@@ -31,7 +31,7 @@ Sistema de Quiz completo construído com Node.js, Express, Prisma, PostgreSQL e 
 | `MAX_UPLOAD_SIZE_MB`    | backend       | Limite (em MB) aplicado pelo Multer para cada imagem de quiz                                           | `10`               |
 | `SMTP_*` / `APP_URL`    | backend       | Configurações de envio de e-mail para recuperação de senha                                             | —                  |
 | `VITE_BASE_PATH`        | frontend      | Mesmo subcaminho do backend; o build do Vite assume `/quiz` caso não seja informado                    | `/quiz`            |
-| `VITE_API_URL`          | frontend      | Base da API consumida pelo frontend. Quando omisso, é derivado de `VITE_BASE_PATH` (`<base>/api`)      | `http://localhost:4000/quiz/api` |
+| `VITE_API_URL`          | frontend      | Base da API consumida pelo frontend. Em produção, prefira caminho relativo; quando omisso, é derivado de `VITE_BASE_PATH` (`<base>/api`) | `/quiz/api` |
 | `VITE_PROXY_TARGET`     | frontend dev  | Alvo do proxy do Vite para `/quiz/api` e `/quiz/uploads`                                               | `http://localhost:4000` |
 | `VITE_MAX_UPLOAD_SIZE_MB` | frontend   | Reflete o limite aplicado no backend para exibir mensagens de validação                                | `10`               |
 
@@ -60,6 +60,7 @@ O servidor será iniciado em `http://localhost:4000/quiz/api` (ajuste a porta vi
 ## Configuração da interface web
 1. Acesse a pasta `client` e duplique `.env.example` para `.env`, configurando `VITE_API_URL` se necessário.
    - `VITE_BASE_PATH=/quiz` mantém o mesmo subcaminho do backend.
+   - Em produção use `VITE_API_URL=/quiz/api` ou deixe a variável vazia para evitar URLs absolutas apontando para `localhost`.
 2. Instale as dependências do frontend:
    ```bash
    cd client

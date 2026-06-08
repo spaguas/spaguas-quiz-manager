@@ -16,7 +16,29 @@ const sanitizeBasePath = (value) => {
 const envBasePath = import.meta.env.VITE_BASE_PATH ?? '/quiz';
 const basePathNormalized = sanitizeBasePath(envBasePath) || '/quiz';
 const defaultApiBase = `${basePathNormalized}/api`.replace(/\/{2,}/g, '/') || '/api';
-const apiBaseURL = import.meta.env.VITE_API_URL || defaultApiBase;
+const normalizeApiBaseURL = (value) => {
+  if (!value) {
+    return defaultApiBase;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return defaultApiBase;
+  }
+
+  if (import.meta.env.PROD && /^https?:\/\//i.test(trimmed)) {
+    try {
+      const url = new URL(trimmed);
+      return `${url.pathname}${url.search}`.replace(/\/+$/, '') || defaultApiBase;
+    } catch (error) {
+      return defaultApiBase;
+    }
+  }
+
+  return trimmed;
+};
+
+const apiBaseURL = normalizeApiBaseURL(import.meta.env.VITE_API_URL);
 
 const api = axios.create({
   baseURL: apiBaseURL,

@@ -3,6 +3,7 @@ import {
   createQuiz,
   updateQuiz,
   updateQuizMedia,
+  updateQuizPrizes,
   addQuestionToQuiz,
   deleteQuestion,
   deleteQuiz,
@@ -13,6 +14,7 @@ import {
   validateQuestionAnswer,
   validateParticipation,
   createSubmission,
+  confirmPrizeClaim,
   getRanking,
   getDashboardSummary,
   clearRanking,
@@ -25,6 +27,7 @@ const router = Router();
 // Rotas administrativas
 router.post('/admin/quizzes', authenticate, requireAdmin, createQuiz);
 router.patch('/admin/quizzes/:quizId', authenticate, requireAdmin, updateQuiz);
+router.patch('/admin/quizzes/:quizId/prizes', authenticate, requireAdmin, updateQuizPrizes);
 router.patch(
   '/admin/quizzes/:quizId/media',
   authenticate,
@@ -49,6 +52,7 @@ router.get('/quizzes/:quizId', getQuizForPlay);
 router.post('/quizzes/:quizId/questions/:questionId/validate', validateQuestionAnswer);
 router.post('/quizzes/:quizId/validate-participation', validateParticipation);
 router.post('/quizzes/:quizId/submissions', createSubmission);
+router.post('/quizzes/:quizId/submissions/:submissionId/prizes/:prizeId/claim', confirmPrizeClaim);
 router.get('/quizzes/:quizId/ranking', getRanking);
 
 export default router;

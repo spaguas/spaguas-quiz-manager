@@ -19,6 +19,21 @@ CREATE TABLE "Quiz" (
   "updatedAt" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE "QuizPrize" (
+  "id" SERIAL PRIMARY KEY,
+  "quizId" INTEGER NOT NULL,
+  "position" INTEGER NOT NULL,
+  "name" TEXT NOT NULL,
+  "description" TEXT,
+  "quantity" INTEGER NOT NULL,
+  "availableQuantity" INTEGER NOT NULL,
+  "createdAt" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updatedAt" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT "QuizPrize_quizId_fkey" FOREIGN KEY ("quizId") REFERENCES "Quiz"("id") ON DELETE CASCADE
+);
+
+CREATE INDEX "QuizPrize_quizId_position_idx" ON "QuizPrize"("quizId", "position");
+
 CREATE TABLE "Question" (
   "id" SERIAL PRIMARY KEY,
   "quizId" INTEGER NOT NULL,
@@ -48,6 +63,7 @@ CREATE TABLE "Submission" (
   "score" INTEGER NOT NULL,
   "total" INTEGER NOT NULL,
   "percentage" DOUBLE PRECISION NOT NULL,
+  "durationSeconds" INTEGER,
   "createdAt" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT "Submission_quizId_fkey" FOREIGN KEY ("quizId") REFERENCES "Quiz"("id") ON DELETE CASCADE,
   CONSTRAINT "Submission_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE SET NULL
@@ -67,6 +83,22 @@ CREATE TABLE "SubmissionAnswer" (
 );
 
 CREATE UNIQUE INDEX "SubmissionAnswer_submissionId_questionId_key" ON "SubmissionAnswer"("submissionId", "questionId");
+
+CREATE TABLE "SubmissionPrizeClaim" (
+  "id" SERIAL PRIMARY KEY,
+  "submissionId" INTEGER NOT NULL,
+  "prizeId" INTEGER NOT NULL,
+  "status" TEXT NOT NULL,
+  "claimedAt" TIMESTAMP,
+  "declinedAt" TIMESTAMP,
+  "createdAt" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updatedAt" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT "SubmissionPrizeClaim_submissionId_fkey" FOREIGN KEY ("submissionId") REFERENCES "Submission"("id") ON DELETE CASCADE,
+  CONSTRAINT "SubmissionPrizeClaim_prizeId_fkey" FOREIGN KEY ("prizeId") REFERENCES "QuizPrize"("id") ON DELETE CASCADE,
+  CONSTRAINT "SubmissionPrizeClaim_submissionId_prizeId_key" UNIQUE ("submissionId", "prizeId")
+);
+
+CREATE INDEX "SubmissionPrizeClaim_prizeId_idx" ON "SubmissionPrizeClaim"("prizeId");
 
 CREATE TABLE "PasswordResetToken" (
   "id" SERIAL PRIMARY KEY,

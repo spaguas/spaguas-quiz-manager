@@ -2,6 +2,8 @@ import * as quizService from '../services/quizService.js';
 import {
   quizCreateSchema,
   quizUpdateSchema,
+  quizPrizeUpdateSchema,
+  prizeClaimSchema,
   questionCreateSchema,
   submissionSchema,
   answerValidationSchema,
@@ -78,6 +80,20 @@ export async function updateQuizMedia(req, res, next) {
       backgroundImage,
       headerImage,
     });
+    return res.json(quiz);
+  } catch (error) {
+    return next(error);
+  }
+}
+
+export async function updateQuizPrizes(req, res, next) {
+  try {
+    const payload = quizPrizeUpdateSchema.parse({
+      ...req.body,
+      quizId: Number(req.params.quizId),
+    });
+
+    const quiz = await quizService.updateQuizPrizes(payload.quizId, payload.prizes);
     return res.json(quiz);
   } catch (error) {
     return next(error);
@@ -172,10 +188,40 @@ export async function createSubmission(req, res, next) {
   }
 }
 
+export async function confirmPrizeClaim(req, res, next) {
+  try {
+    const payload = prizeClaimSchema.parse({
+      ...req.body,
+      quizId: Number(req.params.quizId),
+      submissionId: Number(req.params.submissionId),
+      prizeId: Number(req.params.prizeId),
+    });
+
+    const result = await quizService.confirmPrizeClaim(payload);
+    return res.json(result);
+  } catch (error) {
+    return next(error);
+  }
+}
+
 export async function getRanking(req, res, next) {
   try {
     const quizId = Number(req.params.quizId);
-    const ranking = await quizService.getRanking(quizId);
+    const { full, limit } = req.query;
+
+    let normalizedLimit = null;
+    if (typeof limit === 'string') {
+      const parsed = Number(limit);
+      if (Number.isFinite(parsed) && parsed > 0) {
+        normalizedLimit = parsed;
+      }
+    }
+
+    if (full === 'true') {
+      normalizedLimit = null;
+    }
+
+    const ranking = await quizService.getRanking(quizId, normalizedLimit);
     return res.json(ranking);
   } catch (error) {
     return next(error);

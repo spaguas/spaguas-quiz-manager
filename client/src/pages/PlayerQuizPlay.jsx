@@ -1,6 +1,14 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import api from '../services/api.js';
+import useOnlineStatus from '../hooks/useOnlineStatus.js';
+import {
+  cacheQuizDetail,
+  enqueueSubmission,
+  getCachedQuizDetail,
+  hasPendingSubmissionForEmail,
+  isNetworkError,
+} from '../services/offlineService.js';
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -81,6 +89,7 @@ const buildYouTubeBackgroundUrl = (url, { start, end, loop, muted }) => {
 const PlayerQuizPlay = () => {
   const { quizId } = useParams();
   const navigate = useNavigate();
+  const isOnline = useOnlineStatus();
   const [quiz, setQuiz] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -99,6 +108,9 @@ const PlayerQuizPlay = () => {
   const [backgroundLoaded, setBackgroundLoaded] = useState(false);
   const [videoReady, setVideoReady] = useState(false);
   const [checkingParticipation, setCheckingParticipation] = useState(false);
+  const [quizStartedAt, setQuizStartedAt] = useState(null);
+  const [claimingPrizeId, setClaimingPrizeId] = useState(null);
+  const [prizeFeedback, setPrizeFeedback] = useState('');
 
   const clampIntensity = (value, fallback = 0.65) => {
     const parsed = Number(value);
@@ -127,6 +139,7 @@ const PlayerQuizPlay = () => {
         setError('');
         const response = await api.get(`/quizzes/${quizId}`);
         const quizData = response.data;
+        cacheQuizDetail(quizData);
         const initialResponses = {};
         quizData.questions.forEach((question) => {
           initialResponses[question.id] = {
@@ -145,9 +158,37 @@ const PlayerQuizPlay = () => {
         setSubmissionError('');
         setResult(null);
         setQuizCompleted(false);
+        setQuizStartedAt(null);
         setUserName('');
         setUserEmail('');
       } catch (err) {
+        const cached = getCachedQuizDetail(quizId);
+        if (isNetworkError(err) && cached?.quiz) {
+          const quizData = cached.quiz;
+          const initialResponses = {};
+          quizData.questions.forEach((question) => {
+            initialResponses[question.id] = {
+              selectedOptionId: null,
+              isConfirmed: false,
+              isCorrect: null,
+              correctOptions: [],
+            };
+          });
+          setQuiz(quizData);
+          setResponses(initialResponses);
+          setStage('identification');
+          setCurrentQuestionIndex(0);
+          setQuestionError('');
+          setIdentificationError('');
+          setSubmissionError('');
+          setResult(null);
+          setQuizCompleted(false);
+          setQuizStartedAt(null);
+          setUserName('');
+          setUserEmail('');
+          setError('');
+          return;
+        }
         setError(err.response?.data?.message || 'Não foi possível carregar o quiz.');
       } finally {
         setLoading(false);
@@ -191,7 +232,27 @@ const PlayerQuizPlay = () => {
   const currentQuestion = quiz?.questions?.[currentQuestionIndex] ?? null;
   const currentResponse = currentQuestion ? responses[currentQuestion.id] : null;
   const isLastQuestion = quiz ? currentQuestionIndex === quiz.questions.length - 1 : false;
-  const answerStatus = currentResponse?.isConfirmed ? (currentResponse.isCorrect ? 'correct' : 'incorrect') : null;
+  const answerStatus = currentResponse?.isConfirmed && currentResponse.isCorrect !== null
+    ? (currentResponse.isCorrect ? 'correct' : 'incorrect')
+    : null;
+
+  const saveOfflineSubmission = (payload) => {
+    if (!hasPendingSubmissionForEmail({ quizId, userEmail: payload.userEmail })) {
+      enqueueSubmission({
+        quizId,
+        quizTitle: quiz.title,
+        payload,
+      });
+    }
+    setResult({
+      pendingSync: true,
+      score: null,
+      total: quiz.questions.length,
+      percentage: null,
+      position: null,
+    });
+    setQuizCompleted(true);
+  };
 
   const canNavigateTo = (index) => {
     if (!quiz) {
@@ -269,13 +330,27 @@ const PlayerQuizPlay = () => {
 
     try {
       setCheckingParticipation(true);
-      await api.post(`/quizzes/${quizId}/validate-participation`, {
-        userName: trimmedName,
-        userEmail: trimmedEmail,
-      });
+      if (hasPendingSubmissionForEmail({ quizId, userEmail: trimmedEmail })) {
+        setIdentificationError('Este e-mail já possui uma participação offline pendente para este quiz.');
+        return;
+      }
+
+      if (isOnline) {
+        await api.post(`/quizzes/${quizId}/validate-participation`, {
+          userName: trimmedName,
+          userEmail: trimmedEmail,
+        });
+      }
     } catch (err) {
-      setIdentificationError(err.response?.data?.message || 'Você já participou deste quiz.');
-      return;
+      if (!isNetworkError(err)) {
+        setIdentificationError(err.response?.data?.message || 'Você já participou deste quiz.');
+        return;
+      }
+      if (hasPendingSubmissionForEmail({ quizId, userEmail: trimmedEmail })) {
+        setIdentificationError('Este e-mail já possui uma participação offline pendente para este quiz.');
+        return;
+      }
+      setIdentificationError('');
     } finally {
       setCheckingParticipation(false);
     }
@@ -288,6 +363,7 @@ const PlayerQuizPlay = () => {
     setSubmissionError('');
     setResult(null);
     setQuizCompleted(false);
+    setQuizStartedAt(Date.now());
   };
 
   const handleConfirmAnswer = async () => {
@@ -303,6 +379,20 @@ const PlayerQuizPlay = () => {
 
     try {
       setValidating(true);
+      if (!isOnline) {
+        setResponses((prev) => ({
+          ...prev,
+          [currentQuestion.id]: {
+            ...prev[currentQuestion.id],
+            isConfirmed: true,
+            isCorrect: null,
+            correctOptions: [],
+          },
+        }));
+        setQuestionError('');
+        return;
+      }
+
       const response = await api.post(`/quizzes/${quizId}/questions/${currentQuestion.id}/validate`, {
         optionId: selectedOptionId,
       });
@@ -317,6 +407,19 @@ const PlayerQuizPlay = () => {
       }));
       setQuestionError('');
     } catch (err) {
+      if (isNetworkError(err)) {
+        setResponses((prev) => ({
+          ...prev,
+          [currentQuestion.id]: {
+            ...prev[currentQuestion.id],
+            isConfirmed: true,
+            isCorrect: null,
+            correctOptions: [],
+          },
+        }));
+        setQuestionError('');
+        return;
+      }
       setQuestionError(err.response?.data?.message || 'Não foi possível validar sua resposta.');
     } finally {
       setValidating(false);
@@ -358,6 +461,7 @@ const PlayerQuizPlay = () => {
     const payload = {
       userName,
       userEmail,
+      durationSeconds: Math.max(1, Math.ceil((Date.now() - (quizStartedAt ?? Date.now())) / 1000)),
       answers: quiz.questions.map((question) => ({
         questionId: question.id,
         optionId: responses[question.id]?.selectedOptionId,
@@ -366,10 +470,19 @@ const PlayerQuizPlay = () => {
 
     try {
       setSubmitting(true);
+      if (!isOnline) {
+        saveOfflineSubmission(payload);
+        return;
+      }
+
       const response = await api.post(`/quizzes/${quizId}/submissions`, payload);
       setResult(response.data);
       setQuizCompleted(true);
     } catch (err) {
+      if (isNetworkError(err)) {
+        saveOfflineSubmission(payload);
+        return;
+      }
       setSubmissionError(err.response?.data?.message || 'Não foi possível registrar suas respostas.');
     } finally {
       setSubmitting(false);
@@ -413,10 +526,38 @@ const PlayerQuizPlay = () => {
   const nextDisabled = !currentResponse?.isConfirmed || quizCompleted;
   const submitDisabled = submitting || quizCompleted;
   const submitLabel = submitting ? 'Enviando...' : quizCompleted ? 'Quiz finalizado' : 'Enviar respostas';
-  const correctAnswersText =
-    currentResponse?.correctOptions && currentResponse.correctOptions.length > 0
-      ? currentResponse.correctOptions.map((option) => option.text).join(', ')
-      : '';
+
+  const handlePrizeClaim = async (prize, received) => {
+    if (!result?.submissionId || !prize?.id) {
+      return;
+    }
+
+    setPrizeFeedback('');
+
+    try {
+      setClaimingPrizeId(prize.id);
+      const response = await api.post(
+        `/quizzes/${quizId}/submissions/${result.submissionId}/prizes/${prize.id}/claim`,
+        {
+          userEmail,
+          received,
+        },
+      );
+
+      const updatedPrize = response.data?.prize;
+      setResult((prev) => ({
+        ...prev,
+        prizes: (prev.prizes ?? []).map((item) =>
+          item.id === updatedPrize.id ? updatedPrize : item,
+        ),
+      }));
+      setPrizeFeedback(response.data?.message || 'Informação do prêmio registrada.');
+    } catch (err) {
+      setPrizeFeedback(err.response?.data?.message || 'Não foi possível registrar a retirada do prêmio.');
+    } finally {
+      setClaimingPrizeId(null);
+    }
+  };
 
   return (
     <div className={`quiz-play-wrapper ${hasBackground ? 'has-background' : ''}`}>
@@ -474,6 +615,11 @@ const PlayerQuizPlay = () => {
           {stage === 'identification' && (
             <form className="card wizard-identification" onSubmit={handleStartQuiz}>
               <h2>Identificação</h2>
+              {!isOnline && (
+                <div className="offline-banner">
+                  Você está offline. A participação será salva neste dispositivo e sincronizada quando a conexão voltar.
+                </div>
+              )}
               <p style={{ color: '#475569', marginBottom: '1rem' }}>
                 Informe seu nome e e-mail para participar do ranking (cada e-mail participa apenas uma vez por quiz).
               </p>
@@ -524,9 +670,11 @@ const PlayerQuizPlay = () => {
                   {quiz.questions.map((question, index) => {
                     const response = responses[question.id];
                     const statusClass = response?.isConfirmed
-                      ? response.isCorrect
-                        ? 'success'
-                        : 'error'
+                      ? response.isCorrect === null
+                        ? 'warning'
+                        : response.isCorrect
+                          ? 'success'
+                          : 'error'
                       : 'pending';
                     const isActive = index === currentQuestionIndex;
                     return (
@@ -540,7 +688,9 @@ const PlayerQuizPlay = () => {
                       >
                         <span className="wizard-step-label">
                           {response?.isConfirmed ? (
-                            response.isCorrect ? (
+                            response.isCorrect === null ? (
+                              <span aria-hidden="true" className="wizard-icon warning">!</span>
+                            ) : response.isCorrect ? (
                               <span aria-hidden="true" className="wizard-icon success">✓</span>
                             ) : (
                               <span aria-hidden="true" className="wizard-icon danger">✕</span>
@@ -561,8 +711,10 @@ const PlayerQuizPlay = () => {
                     Pergunta {currentQuestionIndex + 1} de {quiz.questions.length}
                   </span>
                   {currentResponse?.isConfirmed && (
-                    <span className={`tag ${currentResponse.isCorrect ? 'success' : 'danger'}`}>
-                      {currentResponse.isCorrect ? 'Resposta correta' : 'Resposta incorreta'}
+                    <span className={`tag ${currentResponse.isCorrect === null ? 'warning' : currentResponse.isCorrect ? 'success' : 'danger'}`}>
+                      {currentResponse.isCorrect === null
+                        ? 'Resposta registrada'
+                        : currentResponse.isCorrect ? 'Resposta correta' : 'Resposta incorreta'}
                     </span>
                   )}
                 </div>
@@ -606,6 +758,11 @@ const PlayerQuizPlay = () => {
                 {answerStatus === 'incorrect' && (
                   <div className="answer-feedback danger">Resposta incorreta. Continue tentando nas próximas!</div>
                 )}
+                {currentResponse?.isConfirmed && currentResponse.isCorrect === null && (
+                  <div className="answer-feedback warning">
+                    Resposta salva offline. A correção será calculada durante a sincronização.
+                  </div>
+                )}
                 {questionError && <div className="card page-error" style={{ marginTop: '2rem' }}>{questionError}</div>}
                 <div className="wizard-actions">
                   <button
@@ -648,10 +805,69 @@ const PlayerQuizPlay = () => {
           {result && (
             <div className="card">
               <h2>Resultado</h2>
-              <p>
-                Você acertou <strong>{result.score}</strong> de <strong>{result.total}</strong> perguntas
-                ({result.percentage.toFixed(2)}%). Sua posição atual no ranking é <strong>{result.position}º</strong>.
-              </p>
+              {result.pendingSync ? (
+                <p>
+                  Participação salva offline. Quando a conexão voltar, suas respostas serão enviadas ao servidor e
+                  entrarão no ranking.
+                </p>
+              ) : (
+                <p>
+                  Você acertou <strong>{result.score}</strong> de <strong>{result.total}</strong> perguntas
+                  ({result.percentage.toFixed(2)}%). Sua posição atual no ranking é <strong>{result.position}º</strong>.
+                </p>
+              )}
+              {!result.pendingSync && Array.isArray(result.prizes) && result.prizes.length > 0 && (
+                <div className="result-prize-panel">
+                  <h3>Prêmios da sua posição</h3>
+                  {result.hasUnavailablePrize && (
+                    <div className="tag danger">
+                      Um ou mais prêmios da sua posição estão indisponíveis em estoque.
+                    </div>
+                  )}
+                  <div className="result-prize-list">
+                    {result.prizes.map((prize) => {
+                      const isClaimed = prize.claimStatus === 'CLAIMED';
+                      const isDeclined = prize.claimStatus === 'DECLINED';
+                      const isUnavailable = !prize.isAvailable && !isClaimed;
+
+                      return (
+                        <div key={prize.id} className="result-prize-item">
+                          <div>
+                            <strong>{prize.name}</strong>
+                            {prize.description && <p>{prize.description}</p>}
+                            <span className={`tag ${isUnavailable ? 'danger' : 'success'}`}>
+                              {prize.availableQuantity}/{prize.quantity} disponível(is)
+                            </span>
+                            {isClaimed && <span className="tag success">Retirada confirmada</span>}
+                            {isDeclined && <span className="tag warning">Marcado como não retirado</span>}
+                          </div>
+                          {!isClaimed && !isDeclined && (
+                            <div className="prize-claim-actions">
+                              <button
+                                className="button"
+                                type="button"
+                                onClick={() => handlePrizeClaim(prize, true)}
+                                disabled={claimingPrizeId === prize.id || isUnavailable}
+                              >
+                                {claimingPrizeId === prize.id ? 'Registrando...' : 'Confirmar retirada'}
+                              </button>
+                              <button
+                                className="button ghost"
+                                type="button"
+                                onClick={() => handlePrizeClaim(prize, false)}
+                                disabled={claimingPrizeId === prize.id}
+                              >
+                                Não retirei
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {prizeFeedback && <div className="tag info">{prizeFeedback}</div>}
+                </div>
+              )}
               <div className="form-actions">
                 <button
                   className="button secondary"

@@ -11,6 +11,26 @@ const createEmptyForm = (order) => ({
   ],
 });
 
+const createEmptyPrize = () => ({
+  localId: `new-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+  position: '',
+  name: '',
+  description: '',
+  quantity: '1',
+  availableQuantity: '1',
+});
+
+const normalizePrizeRows = (prizes = []) =>
+  prizes.map((prize) => ({
+    localId: `prize-${prize.id}`,
+    id: prize.id,
+    position: String(prize.position ?? ''),
+    name: prize.name ?? '',
+    description: prize.description ?? '',
+    quantity: String(prize.quantity ?? 1),
+    availableQuantity: String(prize.availableQuantity ?? prize.quantity ?? 1),
+  }));
+
 const AdminQuestionManager = () => {
   const { quizId } = useParams();
   const navigate = useNavigate();
@@ -39,6 +59,10 @@ const AdminQuestionManager = () => {
   const [updatingQuiz, setUpdatingQuiz] = useState(false);
   const [quizError, setQuizError] = useState('');
   const [quizFeedback, setQuizFeedback] = useState('');
+  const [prizeRows, setPrizeRows] = useState([]);
+  const [savingPrizes, setSavingPrizes] = useState(false);
+  const [prizeError, setPrizeError] = useState('');
+  const [prizeFeedback, setPrizeFeedback] = useState('');
   const [backgroundFile, setBackgroundFile] = useState(null);
   const [headerFile, setHeaderFile] = useState(null);
   const [backgroundPreview, setBackgroundPreview] = useState('');
@@ -157,6 +181,7 @@ const AdminQuestionManager = () => {
       setHeaderFile(null);
       setBackgroundPreviewFromServer(quiz.backgroundImageUrl ?? '');
       setHeaderPreviewFromServer(quiz.headerImageUrl ?? '');
+      setPrizeRows(normalizePrizeRows(quiz.prizes ?? []));
       if (backgroundInputRef.current) {
         backgroundInputRef.current.value = '';
       }
@@ -219,6 +244,44 @@ const AdminQuestionManager = () => {
       ...prev,
       backgroundIntensity: event.target.value,
     }));
+  };
+
+  const handlePrizeChange = (index, field) => (event) => {
+    const { value } = event.target;
+    setPrizeRows((prev) =>
+      prev.map((prize, prizeIndex) => {
+        if (prizeIndex !== index) {
+          return prize;
+        }
+
+        const updated = {
+          ...prize,
+          [field]: value,
+        };
+
+        if (field === 'quantity') {
+          const nextQuantity = Number(value);
+          const currentAvailable = Number(updated.availableQuantity);
+          if (Number.isInteger(nextQuantity) && nextQuantity >= 0 && currentAvailable > nextQuantity) {
+            updated.availableQuantity = String(nextQuantity);
+          }
+        }
+
+        return updated;
+      }),
+    );
+  };
+
+  const handleAddPrize = () => {
+    setPrizeRows((prev) => [...prev, createEmptyPrize()]);
+    setPrizeError('');
+    setPrizeFeedback('');
+  };
+
+  const handleRemovePrize = (index) => {
+    setPrizeRows((prev) => prev.filter((_, prizeIndex) => prizeIndex !== index));
+    setPrizeError('');
+    setPrizeFeedback('');
   };
 
   const maxUploadSizeMbEnv = Number(import.meta.env.VITE_MAX_UPLOAD_SIZE_MB ?? '10');
@@ -644,6 +707,72 @@ const AdminQuestionManager = () => {
     }
   };
 
+  const handleSavePrizes = async (event) => {
+    event.preventDefault();
+    setPrizeError('');
+    setPrizeFeedback('');
+    setQuizFeedback('');
+    setQuizError('');
+
+    const normalizedPrizes = [];
+
+    for (const [index, prize] of prizeRows.entries()) {
+      const position = Number(prize.position);
+      const quantity = Number(prize.quantity);
+      const availableQuantity = Number(prize.availableQuantity);
+      const name = prize.name.trim();
+      const description = prize.description.trim();
+      const label = `Prêmio ${index + 1}`;
+
+      if (!Number.isInteger(position) || position < 1) {
+        setPrizeError(`${label}: informe uma posição válida.`);
+        return;
+      }
+
+      if (name.length < 2) {
+        setPrizeError(`${label}: informe o nome do prêmio/brinde.`);
+        return;
+      }
+
+      if (!Number.isInteger(quantity) || quantity < 1) {
+        setPrizeError(`${label}: informe a quantidade total do item.`);
+        return;
+      }
+
+      if (!Number.isInteger(availableQuantity) || availableQuantity < 0) {
+        setPrizeError(`${label}: informe a quantidade disponível em estoque.`);
+        return;
+      }
+
+      if (availableQuantity > quantity) {
+        setPrizeError(`${label}: estoque disponível não pode ser maior que a quantidade total.`);
+        return;
+      }
+
+      normalizedPrizes.push({
+        position,
+        name,
+        description: description || null,
+        quantity,
+        availableQuantity,
+      });
+    }
+
+    try {
+      setSavingPrizes(true);
+      const response = await api.patch(`/admin/quizzes/${quizId}/prizes`, {
+        prizes: normalizedPrizes,
+      });
+      setQuiz(response.data);
+      setPrizeRows(normalizePrizeRows(response.data?.prizes ?? []));
+      setPrizeFeedback('Prêmios atualizados com sucesso.');
+    } catch (err) {
+      setPrizeError(err.response?.data?.message || 'Não foi possível salvar os prêmios.');
+    } finally {
+      setSavingPrizes(false);
+    }
+  };
+
   if (loading) {
     return <div className="page-loading">Carregando quiz...</div>;
   }
@@ -874,6 +1003,112 @@ const AdminQuestionManager = () => {
         <div className="form-actions">
           <button className="button" type="submit" disabled={updatingQuiz}>
             {updatingQuiz ? 'Salvando...' : 'Salvar alterações'}
+          </button>
+        </div>
+      </form>
+
+      <form className="card form-grid" onSubmit={handleSavePrizes}>
+        <div className="section-heading">
+          <div>
+            <h2>Prêmios e brindes do ranking</h2>
+            <p className="page-description">
+              Defina quais itens serão exibidos para cada posição e acompanhe a disponibilidade em estoque.
+            </p>
+          </div>
+          <button className="button secondary" type="button" onClick={handleAddPrize}>
+            Adicionar prêmio
+          </button>
+        </div>
+
+        {!prizeRows.length ? (
+          <div className="empty-state">Nenhum prêmio cadastrado para este ranking.</div>
+        ) : (
+          <div className="prize-editor-list">
+            {prizeRows.map((prize, index) => {
+              const quantity = Number(prize.quantity);
+              const availableQuantity = Number(prize.availableQuantity);
+              const isAvailable = Number.isInteger(availableQuantity) && availableQuantity > 0;
+              const stockLabel =
+                Number.isInteger(availableQuantity) && Number.isInteger(quantity)
+                  ? `${availableQuantity}/${quantity} disponível(is)`
+                  : 'Estoque não informado';
+
+              return (
+                <div key={prize.localId} className="prize-editor-row">
+                  <div className="form-field">
+                    <label htmlFor={`prize-position-${prize.localId}`}>Posição</label>
+                    <input
+                      id={`prize-position-${prize.localId}`}
+                      type="number"
+                      min="1"
+                      value={prize.position}
+                      onChange={handlePrizeChange(index, 'position')}
+                      placeholder="Ex.: 1"
+                    />
+                  </div>
+                  <div className="form-field">
+                    <label htmlFor={`prize-name-${prize.localId}`}>Prêmio/brinde</label>
+                    <input
+                      id={`prize-name-${prize.localId}`}
+                      type="text"
+                      value={prize.name}
+                      onChange={handlePrizeChange(index, 'name')}
+                      placeholder="Ex.: Garrafa térmica"
+                    />
+                  </div>
+                  <div className="form-field">
+                    <label htmlFor={`prize-description-${prize.localId}`}>Descrição</label>
+                    <input
+                      id={`prize-description-${prize.localId}`}
+                      type="text"
+                      value={prize.description}
+                      onChange={handlePrizeChange(index, 'description')}
+                      placeholder="Detalhes opcionais"
+                    />
+                  </div>
+                  <div className="form-field">
+                    <label htmlFor={`prize-quantity-${prize.localId}`}>Qtd. total</label>
+                    <input
+                      id={`prize-quantity-${prize.localId}`}
+                      type="number"
+                      min="1"
+                      value={prize.quantity}
+                      onChange={handlePrizeChange(index, 'quantity')}
+                    />
+                  </div>
+                  <div className="form-field">
+                    <label htmlFor={`prize-available-${prize.localId}`}>Disponível</label>
+                    <input
+                      id={`prize-available-${prize.localId}`}
+                      type="number"
+                      min="0"
+                      value={prize.availableQuantity}
+                      onChange={handlePrizeChange(index, 'availableQuantity')}
+                    />
+                  </div>
+                  <div className="prize-row-actions">
+                    <span className={`tag ${isAvailable ? 'success' : 'danger'}`}>
+                      {stockLabel}
+                    </span>
+                    <button
+                      className="button ghost"
+                      type="button"
+                      onClick={() => handleRemovePrize(index)}
+                    >
+                      Remover
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {prizeError && <div className="page-error" style={{ margin: 0 }}>{prizeError}</div>}
+        {prizeFeedback && <div className="tag success">{prizeFeedback}</div>}
+        <div className="form-actions">
+          <button className="button" type="submit" disabled={savingPrizes}>
+            {savingPrizes ? 'Salvando...' : 'Salvar prêmios'}
           </button>
         </div>
       </form>

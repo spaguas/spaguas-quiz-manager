@@ -40,4 +40,4 @@ EXPOSE 4000
 
 USER nodeapp
 
-CMD ["npm", "start"]
+CMD ["sh", "-c", "npx prisma migrate deploy && npm start"]

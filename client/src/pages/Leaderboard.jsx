@@ -1,6 +1,17 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext.jsx';
 
+const formatDuration = (seconds) => {
+  if (!Number.isFinite(seconds)) {
+    return '-';
+  }
+
+  const totalSeconds = Math.max(0, Math.round(seconds));
+  const minutes = Math.floor(totalSeconds / 60);
+  const remainingSeconds = totalSeconds % 60;
+  return `${minutes}:${String(remainingSeconds).padStart(2, '0')}`;
+};
+
 const Leaderboard = () => {
   const { getLeaderboard } = useAuth();
   const [leaders, setLeaders] = useState([]);
@@ -37,7 +48,7 @@ const Leaderboard = () => {
         <div>
           <h1>Ranking Global</h1>
           <p className="page-description">
-            Acompanhe os usuários com maior pontuação, nível e conquistas na plataforma.
+            Acompanhe os participantes com mais acertos. Em caso de empate, vence quem concluiu em menos tempo.
           </p>
         </div>
       </div>
@@ -48,11 +59,10 @@ const Leaderboard = () => {
             <tr>
               <th>#</th>
               <th>Usuário</th>
-              <th>Pontos</th>
-              <th>Nível</th>
-              <th>Quizzes</th>
               <th>Acertos</th>
-              <th>Melhor sequência</th>
+              <th>Duração total</th>
+              <th>Duração média</th>
+              <th>Quizzes</th>
             </tr>
           </thead>
           <tbody>
@@ -64,16 +74,15 @@ const Leaderboard = () => {
               </tr>
             ) : (
               leaders.map((leader) => {
-                const trophy = leader.position === 1 ? '🥇' : leader.position === 2 ? '🥈' : leader.position === 3 ? '🥉' : '🏅';
+                const medal = leader.position === 1 ? '🥇' : leader.position === 2 ? '🥈' : leader.position === 3 ? '🥉' : null;
                 return (
-                  <tr key={leader.userId}>
-                    <td><strong>{trophy} {leader.position}º</strong></td>
+                  <tr key={leader.userId ?? leader.email ?? leader.position}>
+                    <td><strong>{medal ? `${medal} ` : ''}{leader.position}º</strong></td>
                   <td>{leader.name}</td>
-                  <td>{leader.points}</td>
-                  <td>Nível {leader.level}</td>
-                  <td>{leader.totalQuizzes}</td>
                   <td>{leader.totalCorrect}</td>
-                  <td>{leader.bestStreak}</td>
+                  <td>{formatDuration(leader.totalDurationSeconds)}</td>
+                  <td>{formatDuration(leader.averageDurationSeconds)}</td>
+                  <td>{leader.totalQuizzes}</td>
                   </tr>
                 );
               })

@@ -2,6 +2,12 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
 import api from '../services/api.js';
+import {
+  cacheQuizDetail,
+  cacheQuizList,
+  getCachedQuizList,
+  isNetworkError,
+} from '../services/offlineService.js';
 
 const PlayerQuizList = () => {
   const [quizzes, setQuizzes] = useState([]);
@@ -15,7 +21,21 @@ const PlayerQuizList = () => {
         setLoading(true);
         const response = await api.get('/quizzes');
         setQuizzes(response.data);
+        cacheQuizList(response.data);
+        void Promise.allSettled(
+          response.data
+            .filter((quiz) => quiz.questionCount > 0)
+            .map((quiz) => api.get(`/quizzes/${quiz.id}`).then((detailResponse) => {
+              cacheQuizDetail(detailResponse.data);
+            })),
+        );
       } catch (err) {
+        const cached = getCachedQuizList();
+        if (isNetworkError(err) && cached?.quizzes?.length) {
+          setQuizzes(cached.quizzes);
+          setError('');
+          return;
+        }
         setError(err.response?.data?.message || 'Não foi possível carregar os quizzes ativos.');
       } finally {
         setLoading(false);

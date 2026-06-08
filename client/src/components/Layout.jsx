@@ -1,13 +1,51 @@
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
+import useOnlineStatus from '../hooks/useOnlineStatus.js';
+import api from '../services/api.js';
+import {
+  QUEUE_UPDATED_EVENT,
+  getPendingSubmissionCount,
+  syncPendingSubmissions,
+} from '../services/offlineService.js';
+import { useEffect, useState } from 'react';
 import logo from '../assets/sp-aguas-logo-branco.png';
 
 const Layout = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, isAdmin: isAdminUser, logout } = useAuth();
+  const isOnline = useOnlineStatus();
+  const [pendingCount, setPendingCount] = useState(getPendingSubmissionCount());
   const isAdminRoute = location.pathname.startsWith('/admin');
   const isPlayerFullScreen = location.pathname.startsWith('/play/quiz');
+
+  useEffect(() => {
+    const refreshPendingCount = () => setPendingCount(getPendingSubmissionCount());
+    window.addEventListener(QUEUE_UPDATED_EVENT, refreshPendingCount);
+    return () => window.removeEventListener(QUEUE_UPDATED_EVENT, refreshPendingCount);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const sync = async () => {
+      if (!isOnline) {
+        return;
+      }
+      await syncPendingSubmissions(api);
+      if (!cancelled) {
+        setPendingCount(getPendingSubmissionCount());
+      }
+    };
+
+    sync();
+    window.addEventListener('online', sync);
+
+    return () => {
+      cancelled = true;
+      window.removeEventListener('online', sync);
+    };
+  }, [isOnline]);
 
   const handleLogout = () => {
     logout();
@@ -72,6 +110,10 @@ const Layout = () => {
             </div>
           </nav>
           <div className="auth-actions">
+            <span className={`connection-chip ${isOnline ? 'online' : 'offline'}`}>
+              {isOnline ? 'Online' : 'Offline'}
+              {pendingCount > 0 && <strong>{pendingCount}</strong>}
+            </span>
             {user ? (
               <>
                 <span className="user-chip">

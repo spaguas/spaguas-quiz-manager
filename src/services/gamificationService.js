@@ -222,8 +222,9 @@ export async function getUserGamification(userId) {
 }
 
 export async function getGlobalLeaderboard(limit = 20) {
-  const users = await prisma.userGamification.findMany({
-    orderBy: [{ points: 'desc' }, { updatedAt: 'asc' }],
+  const normalizedLimit = Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : 20;
+  const submissions = await prisma.submission.findMany({
+    orderBy: { createdAt: 'asc' },
     include: {
       user: {
         select: {
@@ -233,18 +234,75 @@ export async function getGlobalLeaderboard(limit = 20) {
         },
       },
     },
-    take: limit,
   });
 
-  return users.map((entry, index) => ({
-    position: index + 1,
-    userId: entry.userId,
-    name: entry.user.name,
-    email: entry.user.email,
-    points: entry.points,
-    level: entry.level,
-    totalQuizzes: entry.totalQuizzes,
-    totalCorrect: entry.totalCorrect,
-    bestStreak: entry.bestStreak,
-  }));
+  const participants = new Map();
+
+  submissions.forEach((submission) => {
+    const email = (submission.user?.email ?? submission.userEmail ?? '').trim().toLowerCase();
+    const key = email || `submission:${submission.id}`;
+    const current = participants.get(key) ?? {
+      userId: submission.userId,
+      name: submission.user?.name ?? submission.userName,
+      email: email || submission.userEmail,
+      totalQuizzes: 0,
+      totalCorrect: 0,
+      totalIncorrect: 0,
+      totalDurationSeconds: 0,
+      hasDuration: true,
+      firstSubmissionAt: submission.createdAt,
+      lastSubmissionAt: submission.createdAt,
+    };
+
+    current.userId = current.userId ?? submission.userId;
+    current.name = submission.user?.name ?? current.name ?? submission.userName;
+    current.email = current.email ?? email ?? submission.userEmail;
+    current.totalQuizzes += 1;
+    current.totalCorrect += submission.score;
+    current.totalIncorrect += submission.total - submission.score;
+    current.firstSubmissionAt =
+      submission.createdAt < current.firstSubmissionAt ? submission.createdAt : current.firstSubmissionAt;
+    current.lastSubmissionAt =
+      submission.createdAt > current.lastSubmissionAt ? submission.createdAt : current.lastSubmissionAt;
+
+    if (Number.isFinite(submission.durationSeconds)) {
+      current.totalDurationSeconds += submission.durationSeconds;
+    } else {
+      current.hasDuration = false;
+    }
+
+    participants.set(key, current);
+  });
+
+  return Array.from(participants.values())
+    .sort((a, b) => {
+      if (b.totalCorrect !== a.totalCorrect) {
+        return b.totalCorrect - a.totalCorrect;
+      }
+
+      const aDuration = a.hasDuration ? a.totalDurationSeconds : Number.MAX_SAFE_INTEGER;
+      const bDuration = b.hasDuration ? b.totalDurationSeconds : Number.MAX_SAFE_INTEGER;
+
+      if (aDuration !== bDuration) {
+        return aDuration - bDuration;
+      }
+
+      return a.firstSubmissionAt - b.firstSubmissionAt;
+    })
+    .slice(0, normalizedLimit)
+    .map((entry, index) => ({
+      position: index + 1,
+      userId: entry.userId,
+      name: entry.name,
+      email: entry.email,
+      points: entry.totalCorrect,
+      totalDurationSeconds: entry.hasDuration ? entry.totalDurationSeconds : null,
+      averageDurationSeconds: entry.hasDuration
+        ? Number((entry.totalDurationSeconds / entry.totalQuizzes).toFixed(2))
+        : null,
+      level: null,
+      totalQuizzes: entry.totalQuizzes,
+      totalCorrect: entry.totalCorrect,
+      bestStreak: null,
+    }));
 }

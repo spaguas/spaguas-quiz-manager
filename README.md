@@ -7,6 +7,7 @@ Sistema de Quiz completo construído com Node.js, Express, Prisma, PostgreSQL e 
 - Cadastro de perguntas e alternativas com validações de negócio.
 - Acesso público às perguntas sem expor as respostas corretas.
 - Registro de submissões, cálculo automático de pontuação e ranking.
+- Modo offline para participantes, com cache local dos quizzes e sincronização automática das submissões pendentes.
 - Autenticação JWT com perfis de usuário (admin/participante) e controle de acesso.
 - Dashboard administrativo com ranking geral, top quizzes, top participantes e atividade recente.
 - Interface web para administração (cadastro e manutenção) e para os participantes responderem aos quizzes.
@@ -176,6 +177,20 @@ Todos os endpoints estão disponíveis sob o prefixo `/api`.
   ```
 - `GET /api/admin/quizzes` – lista quizzes com perguntas e respostas.
 - `GET /api/admin/quizzes/:quizId` – detalhes do quiz (inclui respostas corretas).
+- `PATCH /api/admin/quizzes/:quizId/prizes` – substitui a lista de prêmios/brindes do ranking do quiz.
+  ```json
+  {
+    "prizes": [
+      {
+        "position": 1,
+        "name": "Garrafa térmica",
+        "description": "Brinde do primeiro lugar",
+        "quantity": 3,
+        "availableQuantity": 2
+      }
+    ]
+  }
+  ```
 - `DELETE /api/admin/quizzes/:quizId/questions/:questionId` – remove uma pergunta (reordena automaticamente as restantes).
 - `DELETE /api/admin/quizzes/:quizId/ranking` – limpa todas as submissões e o ranking do quiz.
 - `GET /api/admin/dashboard` – estatísticas e visão geral do sistema.
@@ -190,6 +205,7 @@ Todos os endpoints estão disponíveis sob o prefixo `/api`.
   {
     "userName": "Diego",
     "userEmail": "diego@example.com",
+    "durationSeconds": 95,
     "answers": [
       { "questionId": 1, "optionId": 2 },
       { "questionId": 2, "optionId": 5 }
@@ -197,11 +213,23 @@ Todos os endpoints estão disponíveis sob o prefixo `/api`.
   }
   ```
 - Cada e-mail só pode participar uma única vez por quiz; em caso de duplicidade o serviço retorna `409`.
-- `GET /api/quizzes/:quizId/ranking` – lista top 10 do ranking.
+- `GET /api/quizzes/:quizId/ranking` – lista o ranking. A posição considera mais acertos primeiro e, em caso de empate, menor duração. O retorno também inclui os prêmios/brindes configurados por posição e sua disponibilidade em estoque.
+- `POST /api/quizzes/:quizId/submissions/:submissionId/prizes/:prizeId/claim` – registra se o participante retirou ou não o prêmio.
+  ```json
+  {
+    "userEmail": "diego@example.com",
+    "received": true
+  }
+  ```
+
+### Funcionamento Offline
+- A aplicação web registra um service worker e mantém em cache a lista e os detalhes dos quizzes carregados enquanto há conexão.
+- Quando o participante está offline, o quiz pode ser respondido com os dados em cache. A correção imediata das respostas fica pendente, pois a pontuação final é calculada pelo servidor.
+- Submissões feitas offline são salvas no navegador e sincronizadas automaticamente quando a conexão volta. O indicador Online/Offline da navegação principal mostra também a quantidade de submissões pendentes.
 
 ### Gamificação
 - `GET /api/gamification/profile` – retorna pontos, nível, conquistas e eventos do usuário autenticado.
-- `GET /api/gamification/leaderboard` – ranking global ordenado por pontuação.
+- `GET /api/gamification/leaderboard` – ranking global baseado em todas as submissões, incluindo participantes temporários, ordenado por acertos e menor duração em caso de empate.
 
 ## Próximos Passos Sugeridos
 - Integrar serviço de e-mail em produção para envio real dos tokens de recuperação.

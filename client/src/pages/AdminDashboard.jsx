@@ -1,6 +1,41 @@
 import { useEffect, useState } from 'react';
 import dayjs from 'dayjs';
+import {
+  CheckCircle2,
+  Clock,
+  ClipboardList,
+  Gift,
+  Hash,
+  HelpCircle,
+  Percent,
+  Send,
+  UserRoundCheck,
+  Users,
+} from 'lucide-react';
 import api from '../services/api.js';
+
+const formatDuration = (seconds) => {
+  if (!Number.isFinite(seconds)) {
+    return '-';
+  }
+
+  const totalSeconds = Math.max(0, Math.round(seconds));
+  const minutes = Math.floor(totalSeconds / 60);
+  const remainingSeconds = totalSeconds % 60;
+  return `${minutes}:${String(remainingSeconds).padStart(2, '0')}`;
+};
+
+const MetricCard = ({ icon: Icon, label, value }) => (
+  <div className="card metrics-card dashboard-metric-card">
+    <span className="dashboard-metric-icon" aria-hidden="true">
+      <Icon size={22} strokeWidth={2.4} />
+    </span>
+    <div>
+      <span>{label}</span>
+      <span className="metrics-value">{value}</span>
+    </div>
+  </div>
+);
 
 const AdminDashboard = () => {
   const [data, setData] = useState(null);
@@ -35,47 +70,87 @@ const AdminDashboard = () => {
     return <div className="page-error">Dados indisponíveis.</div>;
   }
 
-  const { metrics, topQuizzes, topPerformers, recentActivity } = data;
+  const {
+    metrics,
+    topQuizzes = [],
+    topPerformers = [],
+    recentActivity = [],
+    quizStats = [],
+    prizeStats = metrics?.prizes ?? {},
+  } = data;
+  const prizes = metrics.prizes ?? prizeStats;
 
   return (
-    <div className="grid">
+    <div className="grid admin-dashboard">
       <div className="page-title">
         <div>
           <h1>Dashboard</h1>
           <p className="page-description">
-            Visão geral do desempenho dos quizzes, participação dos usuários e atividades recentes.
+            Visão global dos quizzes, duração dos testes, participação, premiações e atividades recentes.
           </p>
         </div>
       </div>
 
       <div className="metrics-grid">
-        <div className="card metrics-card">
-          <span>Total de quizzes</span>
-          <span className="metrics-value">{metrics.totalQuizzes}</span>
+        <MetricCard icon={ClipboardList} label="Total de quizzes" value={metrics.totalQuizzes} />
+        <MetricCard icon={CheckCircle2} label="Quizzes ativos" value={metrics.activeQuizzes} />
+        <MetricCard icon={HelpCircle} label="Perguntas cadastradas" value={metrics.totalQuestions} />
+        <MetricCard icon={Send} label="Submissões" value={metrics.totalSubmissions} />
+        <MetricCard icon={Users} label="Participantes únicos" value={metrics.totalParticipants} />
+        <MetricCard icon={UserRoundCheck} label="Participantes temporários" value={metrics.temporaryParticipants} />
+        <MetricCard icon={Percent} label="Média acertos (%)" value={metrics.averageAccuracy.toFixed(2)} />
+        <MetricCard icon={Hash} label="Média de respostas corretas" value={metrics.averageScore.toFixed(2)} />
+        <MetricCard icon={Clock} label="Duração média" value={formatDuration(metrics.averageDurationSeconds)} />
+        <MetricCard icon={Gift} label="Prêmios retirados" value={prizes.claimed ?? 0} />
+      </div>
+
+      <div className="dashboard-card-grid">
+        <div className="card">
+          <h2>Duração dos testes</h2>
+          <div className="dashboard-kpi-list">
+            <div>
+              <span>Média geral</span>
+              <strong>{formatDuration(metrics.averageDurationSeconds)}</strong>
+            </div>
+            <div>
+              <span>Mais rápido</span>
+              <strong>{formatDuration(metrics.fastestDurationSeconds)}</strong>
+            </div>
+            <div>
+              <span>Mais lento</span>
+              <strong>{formatDuration(metrics.slowestDurationSeconds)}</strong>
+            </div>
+          </div>
         </div>
-        <div className="card metrics-card">
-          <span>Quizzes ativos</span>
-          <span className="metrics-value">{metrics.activeQuizzes}</span>
-        </div>
-        <div className="card metrics-card">
-          <span>Perguntas cadastradas</span>
-          <span className="metrics-value">{metrics.totalQuestions}</span>
-        </div>
-        <div className="card metrics-card">
-          <span>Submissões</span>
-          <span className="metrics-value">{metrics.totalSubmissions}</span>
-        </div>
-        <div className="card metrics-card">
-          <span>Média acertos (%)</span>
-          <span className="metrics-value">{metrics.averageAccuracy.toFixed(2)}</span>
-        </div>
-        <div className="card metrics-card">
-          <span>Média de respostas corretas</span>
-          <span className="metrics-value">{metrics.averageScore.toFixed(2)}</span>
+
+        <div className="card">
+          <h2>Premiações</h2>
+          <div className="dashboard-kpi-list">
+            <div>
+              <span>Itens configurados</span>
+              <strong>{prizes.configuredItems ?? 0}</strong>
+            </div>
+            <div>
+              <span>Quantidade total</span>
+              <strong>{prizes.totalQuantity ?? 0}</strong>
+            </div>
+            <div>
+              <span>Disponíveis</span>
+              <strong>{prizes.availableQuantity ?? 0}</strong>
+            </div>
+            <div>
+              <span>Retirados</span>
+              <strong>{prizes.claimed ?? 0}</strong>
+            </div>
+            <div>
+              <span>Não retirados</span>
+              <strong>{prizes.declined ?? 0}</strong>
+            </div>
+          </div>
         </div>
       </div>
 
-      <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))' }}>
+      <div className="dashboard-card-grid">
         <div className="card">
           <h2>Quizzes mais respondidos</h2>
           {topQuizzes.length ? (
@@ -85,6 +160,7 @@ const AdminDashboard = () => {
                   <th>Quiz</th>
                   <th>Submissões</th>
                   <th>Média %</th>
+                  <th>Duração média</th>
                 </tr>
               </thead>
               <tbody>
@@ -93,6 +169,7 @@ const AdminDashboard = () => {
                     <td>{quiz.title}</td>
                     <td>{quiz.submissions}</td>
                     <td>{quiz.averageAccuracy.toFixed(2)}</td>
+                    <td>{formatDuration(quiz.averageDurationSeconds)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -112,6 +189,7 @@ const AdminDashboard = () => {
                   <th>Quiz</th>
                   <th>Acertos</th>
                   <th>%</th>
+                  <th>Duração</th>
                 </tr>
               </thead>
               <tbody>
@@ -123,6 +201,7 @@ const AdminDashboard = () => {
                       {submission.score}/{submission.total}
                     </td>
                     <td>{submission.percentage.toFixed(2)}</td>
+                    <td>{formatDuration(submission.durationSeconds)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -131,6 +210,44 @@ const AdminDashboard = () => {
             <div className="empty-state">Participações aparecerão aqui.</div>
           )}
         </div>
+      </div>
+
+      <div className="card">
+        <h2>Estatísticas por quiz</h2>
+        {quizStats.length ? (
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Quiz</th>
+                <th>Status</th>
+                <th>Perguntas</th>
+                <th>Submissões</th>
+                <th>Média %</th>
+                <th>Duração média</th>
+                <th>Prêmios</th>
+                <th>Estoque</th>
+                <th>Retirados</th>
+              </tr>
+            </thead>
+            <tbody>
+              {quizStats.map((quiz) => (
+                <tr key={quiz.quizId}>
+                  <td>{quiz.title}</td>
+                  <td>{quiz.isActive ? 'Ativo' : 'Inativo'}</td>
+                  <td>{quiz.questions}</td>
+                  <td>{quiz.submissions}</td>
+                  <td>{quiz.averageAccuracy.toFixed(2)}</td>
+                  <td>{formatDuration(quiz.averageDurationSeconds)}</td>
+                  <td>{quiz.prizes.configuredItems} itens / {quiz.prizes.totalQuantity} un.</td>
+                  <td>{quiz.prizes.availableQuantity} disp.</td>
+                  <td>{quiz.prizes.claimed} retirados / {quiz.prizes.declined} não retirados</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <div className="empty-state">Nenhum quiz cadastrado.</div>
+        )}
       </div>
 
       <div className="card">
@@ -143,6 +260,7 @@ const AdminDashboard = () => {
                 <th>Participante</th>
                 <th>Quiz</th>
                 <th>Resultado</th>
+                <th>Duração</th>
               </tr>
             </thead>
             <tbody>
@@ -154,6 +272,7 @@ const AdminDashboard = () => {
                   <td>
                     {submission.score}/{submission.total} ({submission.percentage.toFixed(2)}%)
                   </td>
+                  <td>{formatDuration(submission.durationSeconds)}</td>
                 </tr>
               ))}
             </tbody>

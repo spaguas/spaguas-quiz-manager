@@ -19,11 +19,10 @@ services:
       - "${PORT:-4000}:4000"
     networks:
       - spaguas-quiz-network
-    command: ["npm", "start"]
+    command: ["sh", "-c", "npx prisma migrate deploy && npm start"]
 networks:
   spaguas-quiz-network:
     driver: bridge
     ipam:
       config:
         - subnet: 172.140.0.0/16
-

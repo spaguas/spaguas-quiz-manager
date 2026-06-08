@@ -26,6 +26,17 @@ const backgroundIntensitySchema = z
   .min(0.1, 'Informe um valor mínimo de 0.1')
   .max(1, 'Informe um valor máximo de 1');
 
+const prizeSchema = z.object({
+  position: z.number().int().min(1, 'Informe uma posição válida'),
+  name: z.string().trim().min(2, 'Informe o nome do prêmio/brinde'),
+  description: z.string().trim().optional().nullable(),
+  quantity: z.number().int().min(1, 'Informe uma quantidade maior que zero'),
+  availableQuantity: z.number().int().min(0, 'Estoque disponível não pode ser negativo'),
+}).refine((data) => data.availableQuantity <= data.quantity, {
+  message: 'Estoque disponível não pode ser maior que a quantidade total',
+  path: ['availableQuantity'],
+});
+
 export const quizCreateSchema = z
   .object({
     title: z.string().min(3, 'Título deve ter ao menos 3 caracteres'),
@@ -33,9 +44,9 @@ export const quizCreateSchema = z
     isActive: z.boolean().optional().default(true),
     mode: quizModeSchema.default('SEQUENTIAL'),
     questionLimit: questionLimitSchema.optional(),
-    backgroundVideoUrl: youtubeUrlSchema.optional(),
-    backgroundVideoStart: nonNegativeInt.optional(),
-    backgroundVideoEnd: nonNegativeInt.optional(),
+    backgroundVideoUrl: youtubeUrlSchema.optional().nullable(),
+    backgroundVideoStart: nonNegativeInt.optional().nullable(),
+    backgroundVideoEnd: nonNegativeInt.optional().nullable(),
     backgroundVideoLoop: z.boolean().optional().default(true),
     backgroundVideoMuted: z.boolean().optional().default(true),
     backgroundImageIntensity: backgroundIntensitySchema.optional().default(0.65),
@@ -44,14 +55,14 @@ export const quizCreateSchema = z
   .superRefine((data, ctx) => {
     const hasVideo = Boolean(data.backgroundVideoUrl);
     if (!hasVideo) {
-      if (data.backgroundVideoStart !== undefined) {
+      if (data.backgroundVideoStart !== undefined && data.backgroundVideoStart !== null) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           message: 'Informe uma URL de vídeo para definir o tempo inicial.',
           path: ['backgroundVideoStart'],
         });
       }
-      if (data.backgroundVideoEnd !== undefined) {
+      if (data.backgroundVideoEnd !== undefined && data.backgroundVideoEnd !== null) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           message: 'Informe uma URL de vídeo para definir o tempo final.',
@@ -62,7 +73,9 @@ export const quizCreateSchema = z
 
     if (
       data.backgroundVideoEnd !== undefined &&
+      data.backgroundVideoEnd !== null &&
       data.backgroundVideoStart !== undefined &&
+      data.backgroundVideoStart !== null &&
       data.backgroundVideoEnd <= data.backgroundVideoStart
     ) {
       ctx.addIssue({
@@ -153,6 +166,7 @@ export const submissionSchema = z.object({
   quizId: z.number().int().positive(),
   userName: z.string().min(2, 'Nome deve ter ao menos 2 caracteres'),
   userEmail: z.string().trim().email('Informe um e-mail válido'),
+  durationSeconds: z.number().int().positive().optional(),
   answers: z.array(
     z.object({
       questionId: z.number().int().positive(),
@@ -171,4 +185,17 @@ export const participationCheckSchema = z.object({
   quizId: z.number().int().positive(),
   userEmail: z.string().trim().email('Informe um e-mail válido'),
   userName: z.string().trim().optional(),
+});
+
+export const quizPrizeUpdateSchema = z.object({
+  quizId: z.number().int().positive(),
+  prizes: z.array(prizeSchema).default([]),
+});
+
+export const prizeClaimSchema = z.object({
+  quizId: z.number().int().positive(),
+  submissionId: z.number().int().positive(),
+  prizeId: z.number().int().positive(),
+  userEmail: z.string().trim().email('Informe um e-mail válido'),
+  received: z.boolean(),
 });

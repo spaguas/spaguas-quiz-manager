@@ -148,6 +148,13 @@ const AdminQuizList = () => {
                   <button
                     className="button ghost"
                     type="button"
+                    onClick={() => navigate(`/admin/quizzes/${quiz.id}/dashboard`)}
+                  >
+                    Dashboard
+                  </button>
+                  <button
+                    className="button ghost"
+                    type="button"
                     onClick={() => navigate(`/play/quiz/${quiz.id}/ranking`)}
                   >
                     Ver ranking

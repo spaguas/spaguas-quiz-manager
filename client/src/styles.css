@@ -512,6 +512,85 @@ a {
   text-align: right;
 }
 
+.dashboard-client-map {
+  width: 100%;
+  min-height: 360px;
+  overflow: hidden;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  border-radius: 8px;
+  background: #eef2f7;
+}
+
+.dashboard-client-map .leaflet-popup-content {
+  margin: 0.7rem 0.85rem;
+  color: #0f172a;
+  font-family: inherit;
+  font-size: 0.85rem;
+  line-height: 1.45;
+}
+
+.map-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: max(5px, 0.75rem);
+  margin-top: 0.75rem;
+  color: #475569;
+  font-size: 0.85rem;
+}
+
+.map-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: fit-content;
+}
+
+.map-legend i {
+  width: 0.75rem;
+  height: 0.75rem;
+  flex: 0 0 0.75rem;
+  border-radius: 999px;
+  box-shadow: 0 0 0 2px rgba(15, 23, 42, 0.08);
+}
+
+.dashboard-bars {
+  display: grid;
+  gap: 1rem;
+}
+
+.dashboard-bar-row {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.dashboard-bar-row > div:first-child {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  color: #475569;
+  font-size: 0.9rem;
+}
+
+.dashboard-bar-row strong {
+  color: #0f172a;
+}
+
+.dashboard-bar-track {
+  height: 0.6rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e2e8f0;
+}
+
+.dashboard-bar-track span {
+  display: block;
+  height: 100%;
+  min-width: 5px;
+  border-radius: inherit;
+  background: #0ea5e9;
+}
+
 .button {
   display: inline-flex;
   align-items: center;
@@ -964,6 +1043,111 @@ a {
 .admin-gamification-inline textarea {
   min-height: 72px;
   resize: vertical;
+}
+
+.gamification-matrix-wrap {
+  overflow-x: auto;
+  margin-top: 1rem;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  border-radius: 8px;
+}
+
+.gamification-matrix {
+  min-width: 960px;
+}
+
+.gamification-matrix th:first-child,
+.gamification-matrix td:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  min-width: 220px;
+  background: #ffffff;
+}
+
+.gamification-matrix thead th:first-child {
+  z-index: 2;
+  background: #f8fafc;
+}
+
+.gamification-matrix-header,
+.gamification-achievement,
+.gamification-participant {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.gamification-matrix-header {
+  min-width: 5.5rem;
+  color: #334155;
+}
+
+.gamification-matrix-header > span {
+  font-size: 1.35rem;
+}
+
+.gamification-matrix-header small {
+  max-width: 5.5rem;
+  color: #64748b;
+  font-size: 0.72rem;
+  line-height: 1.2;
+  white-space: normal;
+}
+
+.gamification-participant {
+  align-items: flex-start;
+  min-width: 0;
+}
+
+.gamification-participant strong,
+.gamification-participant span {
+  max-width: 18rem;
+  overflow-wrap: anywhere;
+}
+
+.gamification-participant span {
+  color: #64748b;
+  font-size: 0.8rem;
+}
+
+.gamification-achievement-cell {
+  text-align: center;
+}
+
+.gamification-achievement {
+  width: 4.25rem;
+  min-height: 4.25rem;
+  justify-content: center;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.gamification-achievement > span {
+  font-size: 1.6rem;
+}
+
+.gamification-achievement small {
+  color: #64748b;
+  font-size: 0.7rem;
+}
+
+.gamification-achievement.earned {
+  border-color: rgba(14, 165, 233, 0.38);
+  background: #e0f2fe;
+  box-shadow: inset 0 0 0 1px rgba(14, 165, 233, 0.12);
+}
+
+.gamification-achievement.earned small {
+  color: #075985;
+  font-weight: 700;
+}
+
+.gamification-achievement.locked {
+  opacity: 0.45;
+  filter: grayscale(1);
 }
 
 .section-heading {

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Award, Pencil, Plus, Save, Trash2, X } from 'lucide-react';
+import { Award, BarChart3, Medal, Pencil, Plus, Save, Star, Trash2, Trophy, Users, X } from 'lucide-react';
 import api from '../services/api.js';
 
 const metricOptions = [
@@ -36,8 +36,23 @@ const createDefaultForm = () => ({
 const metricLabel = (value) => metricOptions.find((option) => option.value === value)?.label || value;
 const operatorLabel = (value) => operatorOptions.find((option) => option.value === value)?.label || value;
 
+const formatDateTime = (value) => (value ? new Date(value).toLocaleString('pt-BR') : '-');
+
+const MetricCard = ({ icon: Icon, label, value }) => (
+  <div className="card metrics-card dashboard-metric-card">
+    <span className="dashboard-metric-icon" aria-hidden="true">
+      <Icon size={22} strokeWidth={2.4} />
+    </span>
+    <div>
+      <span>{label}</span>
+      <span className="metrics-value">{value}</span>
+    </div>
+  </div>
+);
+
 const AdminGamification = () => {
   const [badges, setBadges] = useState([]);
+  const [dashboard, setDashboard] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -51,8 +66,12 @@ const AdminGamification = () => {
   const loadBadges = async () => {
     try {
       setLoading(true);
-      const response = await api.get('/gamification/admin/badges');
-      setBadges(response.data);
+      const [badgesResponse, dashboardResponse] = await Promise.all([
+        api.get('/gamification/admin/badges'),
+        api.get('/gamification/admin/dashboard'),
+      ]);
+      setBadges(badgesResponse.data);
+      setDashboard(dashboardResponse.data);
       setError('');
     } catch (err) {
       setError(err.response?.data?.message || 'Não foi possível carregar as conquistas.');
@@ -174,19 +193,147 @@ const AdminGamification = () => {
       </div>
 
       <div className="metrics-grid">
-        <div className="dashboard-metric-card">
-          <Award size={24} />
+        <MetricCard icon={Award} label="Conquistas cadastradas" value={badges.length} />
+        <MetricCard icon={Star} label="Conquistas ativas" value={activeCount} />
+        <MetricCard icon={Users} label="Participantes com gamificação" value={dashboard?.metrics?.totalParticipants ?? 0} />
+        <MetricCard icon={Trophy} label="Conquistas obtidas" value={dashboard?.metrics?.totalBadgesAwarded ?? 0} />
+        <MetricCard icon={BarChart3} label="Pontos distribuídos" value={dashboard?.metrics?.totalPoints ?? 0} />
+        <MetricCard icon={Medal} label="Nível médio" value={(dashboard?.metrics?.averageLevel ?? 0).toFixed(2)} />
+      </div>
+
+      <div className="card">
+        <div className="section-heading">
           <div>
-            <span>Conquistas cadastradas</span>
-            <strong>{badges.length}</strong>
+            <h2>Visão global das conquistas</h2>
+            <p className="page-description">
+              Cada linha representa um participante e cada coluna representa uma conquista cadastrada.
+            </p>
           </div>
         </div>
-        <div className="dashboard-metric-card">
-          <Award size={24} />
-          <div>
-            <span>Conquistas ativas</span>
-            <strong>{activeCount}</strong>
+
+        {dashboard?.participants?.length && dashboard?.badges?.length ? (
+          <div className="gamification-matrix-wrap">
+            <table className="table gamification-matrix">
+              <thead>
+                <tr>
+                  <th>Participante</th>
+                  <th>Pontos</th>
+                  <th>Nível</th>
+                  <th>Quizzes</th>
+                  <th>% acerto</th>
+                  {dashboard.badges.map((badge) => (
+                    <th key={badge.id} title={`${badge.name}: ${badge.description}`}>
+                      <span className="gamification-matrix-header">
+                        <span>{badge.icon}</span>
+                        <small>{badge.name}</small>
+                      </span>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {dashboard.participants.map((participant) => (
+                  <tr key={participant.identityKey}>
+                    <td>
+                      <div className="gamification-participant">
+                        <strong>{participant.name}</strong>
+                        <span>{participant.email || (participant.isRegistered ? 'Usuário cadastrado' : 'Temporário')}</span>
+                      </div>
+                    </td>
+                    <td>{participant.points}</td>
+                    <td>{participant.level}</td>
+                    <td>{participant.totalQuizzes}</td>
+                    <td>{participant.accuracyPercentage.toFixed(2)}</td>
+                    {participant.badges.map((badge) => (
+                      <td key={badge.badgeId} className="gamification-achievement-cell">
+                        <span
+                          className={`gamification-achievement ${badge.earned ? 'earned' : 'locked'}`}
+                          title={
+                            badge.earned
+                              ? `${badge.name} conquistada em ${formatDateTime(badge.awardedAt)}`
+                              : `${badge.name} ainda não conquistada`
+                          }
+                        >
+                          <span>{badge.icon}</span>
+                          <small>{badge.earned ? 'Obtida' : 'Pendente'}</small>
+                        </span>
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
+        ) : (
+          <div className="empty-state">Ainda não há participantes com estatísticas de gamificação.</div>
+        )}
+      </div>
+
+      <div className="dashboard-card-grid">
+        <div className="card">
+          <h2>Conquistas mais obtidas</h2>
+          {dashboard?.badges?.length ? (
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Conquista</th>
+                  <th>Obtidas</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {dashboard.badges.map((badge) => (
+                  <tr key={badge.id}>
+                    <td>
+                      <div className="admin-gamification-badge">
+                        <span className="admin-gamification-icon">{badge.icon}</span>
+                        <div>
+                          <strong>{badge.name}</strong>
+                          <small>{badge.description}</small>
+                        </div>
+                      </div>
+                    </td>
+                    <td>{badge.earnedCount}</td>
+                    <td>
+                      <span className={`tag ${badge.isActive ? 'success' : 'warning'}`}>
+                        {badge.isActive ? 'Ativa' : 'Inativa'}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <div className="empty-state">Nenhuma conquista cadastrada até o momento.</div>
+          )}
+        </div>
+
+        <div className="card">
+          <h2>Eventos recentes</h2>
+          {dashboard?.recentEvents?.length ? (
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Data</th>
+                  <th>Participante</th>
+                  <th>Evento</th>
+                  <th>Pontos</th>
+                </tr>
+              </thead>
+              <tbody>
+                {dashboard.recentEvents.map((event) => (
+                  <tr key={event.id}>
+                    <td>{formatDateTime(event.createdAt)}</td>
+                    <td>{event.participantName}</td>
+                    <td>{event.description}</td>
+                    <td>{event.points}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <div className="empty-state">Eventos de gamificação aparecerão aqui.</div>
+          )}
         </div>
       </div>
 

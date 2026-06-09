@@ -18,6 +18,7 @@ import {
   confirmPrizeClaim,
   getRanking,
   getDashboardSummary,
+  getQuizDashboardSummary,
   clearRanking,
   resetQuizData,
 } from '../controllers/quizController.js';
@@ -45,8 +46,9 @@ router.post('/admin/quizzes/:quizId/questions', authenticate, requireAdmin, addQ
 router.post('/admin/quizzes/:quizId/questions/copy', authenticate, requireAdmin, copyQuestionsToQuiz);
 router.delete('/admin/quizzes/:quizId/questions/:questionId', authenticate, requireAdmin, deleteQuestion);
 router.get('/admin/quizzes', authenticate, requireAdmin, listQuizzes);
-router.get('/admin/quizzes/:quizId', authenticate, requireAdmin, getQuizByIdForAdmin);
 router.get('/admin/dashboard', authenticate, requireAdmin, getDashboardSummary);
+router.get('/admin/quizzes/:quizId/dashboard', authenticate, requireAdmin, getQuizDashboardSummary);
+router.get('/admin/quizzes/:quizId', authenticate, requireAdmin, getQuizByIdForAdmin);
 router.delete('/admin/quizzes/:quizId/reset', authenticate, requireAdmin, resetQuizData);
 router.delete('/admin/quizzes/:quizId/ranking', authenticate, requireAdmin, clearRanking);
 

@@ -254,6 +254,185 @@ export async function listBadges() {
   });
 }
 
+const getGamificationIdentityKey = ({ userId = null, participantEmail = null }) => {
+  if (userId) {
+    return `user:${Number(userId)}`;
+  }
+  const email = normalizeParticipantEmail(participantEmail);
+  return email ? `email:${email}` : null;
+};
+
+export async function getGamificationDashboard() {
+  await ensureBadgesExist();
+
+  const [badges, statsRows, userBadges, recentEvents] = await Promise.all([
+    prisma.badge.findMany({
+      orderBy: [{ isActive: 'desc' }, { createdAt: 'asc' }],
+    }),
+    prisma.userGamification.findMany({
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+      },
+      orderBy: [
+        { points: 'desc' },
+        { totalQuizzes: 'desc' },
+        { lastSubmissionAt: 'desc' },
+      ],
+    }),
+    prisma.userBadge.findMany({
+      include: {
+        badge: true,
+      },
+      orderBy: {
+        awardedAt: 'desc',
+      },
+    }),
+    prisma.gamificationEvent.findMany({
+      orderBy: {
+        createdAt: 'desc',
+      },
+      take: 20,
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+      },
+    }),
+  ]);
+
+  const badgesByParticipant = new Map();
+  userBadges.forEach((entry) => {
+    const key = getGamificationIdentityKey({
+      userId: entry.userId,
+      participantEmail: entry.participantEmail,
+    });
+    if (!key) {
+      return;
+    }
+
+    if (!badgesByParticipant.has(key)) {
+      badgesByParticipant.set(key, new Map());
+    }
+
+    badgesByParticipant.get(key).set(entry.badgeId, {
+      id: entry.id,
+      badgeId: entry.badgeId,
+      awardedAt: entry.awardedAt,
+      code: entry.badge.code,
+      name: entry.badge.name,
+      icon: entry.badge.icon,
+    });
+  });
+
+  const participants = statsRows.map((stats, index) => {
+    const key = getGamificationIdentityKey({
+      userId: stats.userId,
+      participantEmail: stats.participantEmail,
+    }) ?? `stats:${stats.id}`;
+    const earnedBadges = badgesByParticipant.get(key) ?? new Map();
+    const answered = stats.totalCorrect + stats.totalIncorrect;
+
+    return {
+      position: index + 1,
+      identityKey: key,
+      userId: stats.userId,
+      name: stats.user?.name ?? stats.participantName ?? stats.participantEmail ?? 'Participante',
+      email: stats.user?.email ?? stats.participantEmail,
+      isRegistered: Boolean(stats.userId),
+      points: stats.points,
+      level: stats.level,
+      experience: stats.experience,
+      nextLevelAt: stats.nextLevelAt,
+      totalQuizzes: stats.totalQuizzes,
+      totalCorrect: stats.totalCorrect,
+      totalIncorrect: stats.totalIncorrect,
+      accuracyPercentage: answered ? Number(((stats.totalCorrect / answered) * 100).toFixed(2)) : 0,
+      bestStreak: stats.bestStreak,
+      currentStreak: stats.currentStreak,
+      lastSubmissionAt: stats.lastSubmissionAt,
+      badges: badges.map((badge) => {
+        const earned = earnedBadges.get(badge.id);
+        return {
+          badgeId: badge.id,
+          code: badge.code,
+          name: badge.name,
+          icon: badge.icon,
+          description: badge.description,
+          isActive: badge.isActive,
+          earned: Boolean(earned),
+          awardedAt: earned?.awardedAt ?? null,
+        };
+      }),
+      earnedBadgeCount: earnedBadges.size,
+    };
+  });
+
+  const totalBadgesAwarded = userBadges.length;
+  const totalPoints = statsRows.reduce((total, stats) => total + stats.points, 0);
+  const totalQuizzes = statsRows.reduce((total, stats) => total + stats.totalQuizzes, 0);
+  const totalCorrect = statsRows.reduce((total, stats) => total + stats.totalCorrect, 0);
+  const totalIncorrect = statsRows.reduce((total, stats) => total + stats.totalIncorrect, 0);
+  const answered = totalCorrect + totalIncorrect;
+  const levelDistribution = statsRows.reduce((acc, stats) => {
+    const key = `Nível ${stats.level}`;
+    acc.set(key, (acc.get(key) ?? 0) + 1);
+    return acc;
+  }, new Map());
+
+  const badgeStats = badges.map((badge) => ({
+    id: badge.id,
+    code: badge.code,
+    name: badge.name,
+    description: badge.description,
+    icon: badge.icon,
+    isActive: badge.isActive,
+    conditionMetric: badge.conditionMetric,
+    conditionOperator: badge.conditionOperator,
+    conditionValue: badge.conditionValue,
+    earnedCount: userBadges.filter((entry) => entry.badgeId === badge.id).length,
+  }));
+
+  return {
+    metrics: {
+      totalParticipants: statsRows.length,
+      registeredParticipants: statsRows.filter((stats) => stats.userId).length,
+      temporaryParticipants: statsRows.filter((stats) => !stats.userId).length,
+      totalBadges: badges.length,
+      activeBadges: badges.filter((badge) => badge.isActive).length,
+      totalBadgesAwarded,
+      totalPoints,
+      totalQuizzes,
+      averageAccuracy: answered ? Number(((totalCorrect / answered) * 100).toFixed(2)) : 0,
+      averageLevel: statsRows.length
+        ? Number((statsRows.reduce((total, stats) => total + stats.level, 0) / statsRows.length).toFixed(2))
+        : 0,
+    },
+    badges: badgeStats,
+    participants,
+    levelDistribution: Array.from(levelDistribution.entries()).map(([level, count]) => ({ level, count })),
+    recentEvents: recentEvents.map((event) => ({
+      id: event.id,
+      userId: event.userId,
+      participantEmail: event.participantEmail,
+      participantName: event.user?.name ?? event.participantEmail ?? 'Participante',
+      type: event.type,
+      points: event.points,
+      description: event.description,
+      createdAt: event.createdAt,
+    })),
+  };
+}
+
 export async function createBadge(data) {
   const payload = normalizeBadgePayload(data);
   const existing = await prisma.badge.findUnique({

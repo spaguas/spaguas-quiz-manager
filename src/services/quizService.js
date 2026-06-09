@@ -1048,6 +1048,82 @@ const buildSubmissionMetadata = (clientMetadata = {}, requestInfo = {}) => {
   };
 };
 
+const normalizeSubmissionRow = (row) => ({
+  id: Number(row.id),
+  quizId: Number(row.quizId),
+  userId: row.userId === null || row.userId === undefined ? null : Number(row.userId),
+  userName: row.userName,
+  userEmail: row.userEmail,
+  score: Number(row.score),
+  total: Number(row.total),
+  percentage: Number(row.percentage),
+  durationSeconds: row.durationSeconds === null || row.durationSeconds === undefined
+    ? null
+    : Number(row.durationSeconds),
+  createdAt: row.createdAt,
+});
+
+async function createSubmissionRecord({
+  quizId,
+  userId,
+  userName,
+  userEmail,
+  score,
+  total,
+  percentage,
+  durationSeconds,
+  evaluation,
+}) {
+  return prisma.$transaction(async (tx) => {
+    const rows = await tx.$queryRaw`
+      INSERT INTO "Submission" (
+        "quizId",
+        "userId",
+        "userName",
+        "userEmail",
+        "score",
+        "total",
+        "percentage",
+        "durationSeconds"
+      )
+      VALUES (
+        ${quizId},
+        ${userId},
+        ${userName},
+        ${userEmail},
+        ${score},
+        ${total},
+        ${percentage},
+        ${durationSeconds}
+      )
+      RETURNING
+        "id",
+        "quizId",
+        "userId",
+        "userName",
+        "userEmail",
+        "score",
+        "total",
+        "percentage",
+        "durationSeconds",
+        "createdAt"
+    `;
+
+    const submission = normalizeSubmissionRow(rows[0]);
+
+    await tx.submissionAnswer.createMany({
+      data: evaluation.map((answer) => ({
+        submissionId: submission.id,
+        questionId: answer.questionId,
+        optionId: answer.optionId,
+        isCorrect: answer.isCorrect,
+      })),
+    });
+
+    return submission;
+  });
+}
+
 async function persistSubmissionMetadata(submissionId, metadata) {
   try {
     await prisma.$executeRaw`
@@ -1188,20 +1264,16 @@ export async function createSubmission({
   }
 
   const submissionMetadata = buildSubmissionMetadata(clientMetadata, requestInfo);
-  const submission = await prisma.submission.create({
-    data: {
-      quizId,
-      userId: submissionUserId,
-      userName: userName || actor?.name || 'Participante',
-      userEmail: normalizedEmail,
-      score: correctAnswers,
-      total: expectedQuestions,
-      percentage,
-      durationSeconds: durationSeconds ?? null,
-      answers: {
-        create: evaluation,
-      },
-    },
+  const submission = await createSubmissionRecord({
+    quizId,
+    userId: submissionUserId,
+    userName: userName || actor?.name || 'Participante',
+    userEmail: normalizedEmail,
+    score: correctAnswers,
+    total: expectedQuestions,
+    percentage,
+    durationSeconds: durationSeconds ?? null,
+    evaluation,
   });
 
   await persistSubmissionMetadata(submission.id, submissionMetadata);
@@ -1633,6 +1705,395 @@ export async function resetQuizData(quizId) {
 
 export const clearQuizRanking = resetQuizData;
 
+async function getDashboardClientInteractionData(quizId = null) {
+  try {
+    const [interactionRows, quizMetadataRows, clientSummaryRows] = await Promise.all([
+      prisma.$queryRaw`
+        SELECT
+          s."id" AS "submissionId",
+          s."quizId",
+          q."title" AS "quizTitle",
+          s."userName",
+          s."userEmail",
+          s."score",
+          s."total",
+          s."percentage",
+          s."durationSeconds",
+          s."createdAt",
+          s."ipAddress",
+          s."ipSource",
+          s."browserName",
+          s."browserVersion",
+          s."osName",
+          s."deviceType",
+          s."locale",
+          s."timezone",
+          s."screenResolution",
+          s."referrer",
+          s."geoLatitude",
+          s."geoLongitude",
+          s."geoAccuracy",
+          s."geoStatus"
+        FROM "Submission" s
+        INNER JOIN "Quiz" q ON q."id" = s."quizId"
+        WHERE (${quizId}::int IS NULL OR s."quizId" = ${quizId})
+        ORDER BY s."createdAt" DESC
+        LIMIT 100
+      `,
+      prisma.$queryRaw`
+        SELECT
+          s."quizId",
+          COUNT(*)::int AS "total",
+          COUNT(s."ipAddress")::int AS "withIp",
+          COUNT(s."browserName")::int AS "withBrowser",
+          COUNT(s."geoLatitude")::int AS "withCoordinates",
+          COUNT(DISTINCT s."ipAddress")::int AS "uniqueIps"
+        FROM "Submission" s
+        WHERE (${quizId}::int IS NULL OR s."quizId" = ${quizId})
+        GROUP BY s."quizId"
+      `,
+      prisma.$queryRaw`
+        SELECT
+          COALESCE(s."deviceType", 'Não identificado') AS "deviceType",
+          COALESCE(s."browserName", 'Não identificado') AS "browserName",
+          COALESCE(s."osName", 'Não identificado') AS "osName",
+          COUNT(*)::int AS "count"
+        FROM "Submission" s
+        WHERE (${quizId}::int IS NULL OR s."quizId" = ${quizId})
+        GROUP BY s."deviceType", s."browserName", s."osName"
+        ORDER BY COUNT(*) DESC
+        LIMIT 20
+      `,
+    ]);
+
+    return {
+      interactions: interactionRows.map((row) => ({
+        submissionId: Number(row.submissionId),
+        quizId: Number(row.quizId),
+        quizTitle: row.quizTitle,
+        userName: row.userName,
+        userEmail: row.userEmail,
+        score: Number(row.score),
+        total: Number(row.total),
+        percentage: Number(row.percentage),
+        durationSeconds: row.durationSeconds === null ? null : Number(row.durationSeconds),
+        createdAt: row.createdAt,
+        ipAddress: row.ipAddress,
+        ipSource: row.ipSource,
+        browserName: row.browserName,
+        browserVersion: row.browserVersion,
+        osName: row.osName,
+        deviceType: row.deviceType,
+        locale: row.locale,
+        timezone: row.timezone,
+        screenResolution: row.screenResolution,
+        referrer: row.referrer,
+        geoLatitude: row.geoLatitude === null ? null : Number(row.geoLatitude),
+        geoLongitude: row.geoLongitude === null ? null : Number(row.geoLongitude),
+        geoAccuracy: row.geoAccuracy === null ? null : Number(row.geoAccuracy),
+        geoStatus: row.geoStatus,
+      })),
+      quizMetadata: quizMetadataRows.map((row) => ({
+        quizId: Number(row.quizId),
+        total: Number(row.total),
+        withIp: Number(row.withIp),
+        withBrowser: Number(row.withBrowser),
+        withCoordinates: Number(row.withCoordinates),
+        uniqueIps: Number(row.uniqueIps),
+      })),
+      clientSummary: clientSummaryRows.map((row) => ({
+        deviceType: row.deviceType,
+        browserName: row.browserName,
+        osName: row.osName,
+        count: Number(row.count),
+      })),
+    };
+  } catch (error) {
+    console.warn('Metadados de cliente indisponíveis no dashboard.', error);
+    return {
+      interactions: [],
+      quizMetadata: [],
+      clientSummary: [],
+    };
+  }
+}
+
+export async function getQuizDashboardSummary(quizId) {
+  await ensurePrizeClaimTable();
+
+  const quiz = await prisma.quiz.findUnique({
+    where: { id: quizId },
+    select: {
+      id: true,
+      title: true,
+      description: true,
+      isActive: true,
+      mode: true,
+      questionLimit: true,
+      createdAt: true,
+      updatedAt: true,
+      _count: {
+        select: {
+          questions: true,
+          submissions: true,
+        },
+      },
+      prizes: {
+        select: {
+          id: true,
+          position: true,
+          name: true,
+          quantity: true,
+          availableQuantity: true,
+          minimumScore: true,
+          minimumPercentage: true,
+        },
+        orderBy: [
+          { position: 'asc' },
+          { id: 'asc' },
+        ],
+      },
+    },
+  });
+
+  if (!quiz) {
+    throw new HttpError(404, 'Quiz não encontrado');
+  }
+
+  const [
+    averageStats,
+    durationStats,
+    distinctParticipants,
+    temporaryParticipants,
+    topPerformers,
+    recentSubmissions,
+    prizeClaimRows,
+    questionRows,
+    scoreDistributionRows,
+    clientInteractionData,
+  ] = await Promise.all([
+    prisma.submission.aggregate({
+      where: { quizId },
+      _avg: {
+        percentage: true,
+        score: true,
+        durationSeconds: true,
+      },
+    }),
+    prisma.submission.aggregate({
+      where: {
+        quizId,
+        durationSeconds: { not: null },
+      },
+      _min: {
+        durationSeconds: true,
+      },
+      _max: {
+        durationSeconds: true,
+      },
+    }),
+    prisma.submission.findMany({
+      distinct: ['userEmail'],
+      where: {
+        quizId,
+        userEmail: { not: null },
+      },
+      select: { userEmail: true },
+    }),
+    prisma.submission.findMany({
+      distinct: ['userEmail'],
+      where: {
+        quizId,
+        userId: null,
+        userEmail: { not: null },
+      },
+      select: { userEmail: true },
+    }),
+    prisma.submission.findMany({
+      where: { quizId },
+      orderBy: [
+        { percentage: 'desc' },
+        { score: 'desc' },
+        { durationSeconds: 'asc' },
+        { createdAt: 'asc' },
+      ],
+      take: 10,
+      select: {
+        id: true,
+        userName: true,
+        userEmail: true,
+        score: true,
+        total: true,
+        percentage: true,
+        durationSeconds: true,
+        createdAt: true,
+      },
+    }),
+    prisma.submission.findMany({
+      where: { quizId },
+      orderBy: { createdAt: 'desc' },
+      take: 15,
+      select: {
+        id: true,
+        userName: true,
+        userEmail: true,
+        score: true,
+        total: true,
+        percentage: true,
+        durationSeconds: true,
+        createdAt: true,
+      },
+    }),
+    prisma.$queryRaw`
+      SELECT
+        spc."status",
+        COUNT(*)::int AS count
+      FROM "SubmissionPrizeClaim" spc
+      INNER JOIN "QuizPrize" qp ON qp."id" = spc."prizeId"
+      WHERE qp."quizId" = ${quizId}
+      GROUP BY spc."status"
+    `,
+    prisma.$queryRaw`
+      SELECT
+        q."id" AS "questionId",
+        q."text",
+        q."order",
+        COUNT(sa."id")::int AS "attempts",
+        COALESCE(SUM(CASE WHEN sa."isCorrect" THEN 1 ELSE 0 END), 0)::int AS "correct",
+        COALESCE(SUM(CASE WHEN sa."isCorrect" THEN 0 ELSE 1 END), 0)::int AS "incorrect"
+      FROM "Question" q
+      LEFT JOIN "SubmissionAnswer" sa ON sa."questionId" = q."id"
+      WHERE q."quizId" = ${quizId}
+      GROUP BY q."id", q."text", q."order"
+      ORDER BY q."order" ASC
+    `,
+    prisma.$queryRaw`
+      SELECT
+        CASE
+          WHEN s."percentage" >= 80 THEN '80% ou mais'
+          WHEN s."percentage" >= 50 THEN '50% a 79%'
+          ELSE 'Abaixo de 50%'
+        END AS "range",
+        COUNT(*)::int AS "count"
+      FROM "Submission" s
+      WHERE s."quizId" = ${quizId}
+      GROUP BY "range"
+      ORDER BY MIN(s."percentage") DESC
+    `,
+    getDashboardClientInteractionData(quizId),
+  ]);
+
+  const prizeClaims = prizeClaimRows.reduce((acc, row) => {
+    if (row.status === 'CLAIMED') {
+      acc.claimed += Number(row.count ?? 0);
+    } else if (row.status === 'DECLINED') {
+      acc.declined += Number(row.count ?? 0);
+    } else {
+      acc.pending += Number(row.count ?? 0);
+    }
+    return acc;
+  }, {
+    claimed: 0,
+    declined: 0,
+    pending: 0,
+  });
+
+  const totalPrizeQuantity = quiz.prizes.reduce((total, prize) => total + prize.quantity, 0);
+  const availablePrizeQuantity = quiz.prizes.reduce((total, prize) => total + prize.availableQuantity, 0);
+
+  return {
+    quiz: {
+      id: quiz.id,
+      title: quiz.title,
+      description: quiz.description,
+      isActive: quiz.isActive,
+      mode: quiz.mode,
+      questionLimit: quiz.questionLimit,
+      createdAt: quiz.createdAt,
+      updatedAt: quiz.updatedAt,
+    },
+    metrics: {
+      totalQuestions: quiz._count.questions,
+      totalSubmissions: quiz._count.submissions,
+      totalParticipants: distinctParticipants.length,
+      temporaryParticipants: temporaryParticipants.length,
+      averageScore: Number((averageStats._avg.score ?? 0).toFixed(2)),
+      averageAccuracy: Number((averageStats._avg.percentage ?? 0).toFixed(2)),
+      averageDurationSeconds: Math.round(averageStats._avg.durationSeconds ?? 0),
+      fastestDurationSeconds: durationStats._min.durationSeconds ?? null,
+      slowestDurationSeconds: durationStats._max.durationSeconds ?? null,
+      prizes: {
+        configuredItems: quiz.prizes.length,
+        totalQuantity: totalPrizeQuantity,
+        availableQuantity: availablePrizeQuantity,
+        unavailableQuantity: Math.max(0, totalPrizeQuantity - availablePrizeQuantity),
+        claimed: prizeClaims.claimed,
+        declined: prizeClaims.declined,
+        pending: Math.max(0, totalPrizeQuantity - availablePrizeQuantity - prizeClaims.claimed),
+      },
+    },
+    prizes: quiz.prizes.map((prize) => ({
+      id: prize.id,
+      position: prize.position,
+      name: prize.name,
+      quantity: prize.quantity,
+      availableQuantity: prize.availableQuantity,
+      minimumScore: prize.minimumScore,
+      minimumPercentage: prize.minimumPercentage,
+    })),
+    questionStats: questionRows.map((row) => {
+      const attempts = Number(row.attempts);
+      const correct = Number(row.correct);
+      const incorrect = Number(row.incorrect);
+      return {
+        questionId: Number(row.questionId),
+        text: row.text,
+        order: Number(row.order),
+        attempts,
+        correct,
+        incorrect,
+        accuracy: attempts ? Number(((correct / attempts) * 100).toFixed(2)) : 0,
+      };
+    }),
+    scoreDistribution: scoreDistributionRows.map((row) => ({
+      range: row.range,
+      count: Number(row.count),
+    })),
+    topPerformers: topPerformers.map((submission) => ({
+      submissionId: submission.id,
+      userName: submission.userName,
+      userEmail: submission.userEmail,
+      score: submission.score,
+      total: submission.total,
+      percentage: submission.percentage,
+      durationSeconds: submission.durationSeconds,
+      createdAt: submission.createdAt,
+    })),
+    recentActivity: recentSubmissions.map((submission) => ({
+      submissionId: submission.id,
+      userName: submission.userName,
+      userEmail: submission.userEmail,
+      score: submission.score,
+      total: submission.total,
+      percentage: submission.percentage,
+      durationSeconds: submission.durationSeconds,
+      createdAt: submission.createdAt,
+    })),
+    clientInteractions: clientInteractionData.interactions,
+    clientSummary: clientInteractionData.clientSummary,
+    clientMetadata: clientInteractionData.quizMetadata[0] ?? {
+      total: 0,
+      withIp: 0,
+      withBrowser: 0,
+      withCoordinates: 0,
+      uniqueIps: 0,
+    },
+    geoInteractions: clientInteractionData.interactions.filter((item) =>
+      Number.isFinite(item.geoLatitude) && Number.isFinite(item.geoLongitude)
+    ),
+  };
+}
+
 export async function getDashboardSummary() {
   await ensurePrizeClaimTable();
 
@@ -1823,6 +2284,10 @@ export async function getDashboardSummary() {
   const quizNameMap = new Map(quizLookup.map((item) => [item.id, item.title]));
   const topQuizStatsMap = new Map(topQuizStats.map((item) => [item.quizId, item]));
   const prizeClaimsByQuiz = new Map();
+  const clientInteractionData = await getDashboardClientInteractionData();
+  const clientMetadataByQuiz = new Map(
+    clientInteractionData.quizMetadata.map((item) => [item.quizId, item]),
+  );
 
   prizeClaimRows.forEach((row) => {
     const quizId = Number(row.quizId);
@@ -1852,6 +2317,13 @@ export async function getDashboardSummary() {
     };
     const prizeTotalQuantity = quiz.prizes.reduce((total, prize) => total + prize.quantity, 0);
     const prizeAvailableQuantity = quiz.prizes.reduce((total, prize) => total + prize.availableQuantity, 0);
+    const clientMetadata = clientMetadataByQuiz.get(quiz.id) ?? {
+      total: 0,
+      withIp: 0,
+      withBrowser: 0,
+      withCoordinates: 0,
+      uniqueIps: 0,
+    };
 
     return {
       quizId: quiz.id,
@@ -1873,6 +2345,7 @@ export async function getDashboardSummary() {
         declined: prizeClaims.declined,
         pending: Math.max(0, prizeTotalQuantity - prizeAvailableQuantity - prizeClaims.claimed),
       },
+      clientMetadata,
       createdAt: quiz.createdAt,
     };
   });
@@ -1933,6 +2406,11 @@ export async function getDashboardSummary() {
     })),
     quizStats,
     prizeStats: globalPrizeStats,
+    clientInteractions: clientInteractionData.interactions,
+    clientSummary: clientInteractionData.clientSummary,
+    geoInteractions: clientInteractionData.interactions.filter((item) =>
+      Number.isFinite(item.geoLatitude) && Number.isFinite(item.geoLongitude)
+    ),
     recentActivity: recentSubmissions.map((submission) => ({
       submissionId: submission.id,
       userName: submission.userName,

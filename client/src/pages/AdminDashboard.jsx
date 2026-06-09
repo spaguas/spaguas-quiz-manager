@@ -12,6 +12,7 @@ import {
   UserRoundCheck,
   Users,
 } from 'lucide-react';
+import DashboardClientMap from '../components/DashboardClientMap.jsx';
 import api from '../services/api.js';
 
 const formatDuration = (seconds) => {
@@ -76,9 +77,23 @@ const AdminDashboard = () => {
     topPerformers = [],
     recentActivity = [],
     quizStats = [],
+    clientInteractions = [],
+    clientSummary = [],
+    geoInteractions = [],
     prizeStats = metrics?.prizes ?? {},
   } = data;
   const prizes = metrics.prizes ?? prizeStats;
+  const clientMetadataTotals = quizStats.reduce((acc, quiz) => ({
+    withIp: acc.withIp + (quiz.clientMetadata?.withIp ?? 0),
+    withBrowser: acc.withBrowser + (quiz.clientMetadata?.withBrowser ?? 0),
+    withCoordinates: acc.withCoordinates + (quiz.clientMetadata?.withCoordinates ?? 0),
+    uniqueIps: acc.uniqueIps + (quiz.clientMetadata?.uniqueIps ?? 0),
+  }), {
+    withIp: 0,
+    withBrowser: 0,
+    withCoordinates: 0,
+    uniqueIps: 0,
+  });
 
   return (
     <div className="grid admin-dashboard">
@@ -102,6 +117,8 @@ const AdminDashboard = () => {
         <MetricCard icon={Hash} label="Média de respostas corretas" value={metrics.averageScore.toFixed(2)} />
         <MetricCard icon={Clock} label="Duração média" value={formatDuration(metrics.averageDurationSeconds)} />
         <MetricCard icon={Gift} label="Prêmios retirados" value={prizes.claimed ?? 0} />
+        <MetricCard icon={Users} label="IPs únicos" value={clientMetadataTotals.uniqueIps} />
+        <MetricCard icon={Hash} label="Pontos no mapa" value={geoInteractions.length} />
       </div>
 
       <div className="dashboard-card-grid">
@@ -227,6 +244,7 @@ const AdminDashboard = () => {
                 <th>Prêmios</th>
                 <th>Estoque</th>
                 <th>Retirados</th>
+                <th>Cliente</th>
               </tr>
             </thead>
             <tbody>
@@ -241,12 +259,103 @@ const AdminDashboard = () => {
                   <td>{quiz.prizes.configuredItems} itens / {quiz.prizes.totalQuantity} un.</td>
                   <td>{quiz.prizes.availableQuantity} disp.</td>
                   <td>{quiz.prizes.claimed} retirados / {quiz.prizes.declined} não retirados</td>
+                  <td>
+                    {quiz.clientMetadata?.withIp ?? 0} IP / {quiz.clientMetadata?.withCoordinates ?? 0} mapa
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         ) : (
           <div className="empty-state">Nenhum quiz cadastrado.</div>
+        )}
+      </div>
+
+      <div className="dashboard-card-grid">
+        <div className="card">
+          <h2>Mapa de interações</h2>
+          {geoInteractions.length ? (
+            <>
+              <DashboardClientMap points={geoInteractions} />
+              <div className="map-legend">
+                <span><i style={{ background: '#16a34a' }} />80% ou mais</span>
+                <span><i style={{ background: '#ca8a04' }} />50% a 79%</span>
+                <span><i style={{ background: '#dc2626' }} />abaixo de 50%</span>
+              </div>
+            </>
+          ) : (
+            <div className="empty-state">
+              Ainda não há interações com coordenadas. A localização depende da permissão do navegador do participante.
+            </div>
+          )}
+        </div>
+
+        <div className="card">
+          <h2>Ambiente do cliente</h2>
+          {clientSummary.length ? (
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Dispositivo</th>
+                  <th>Navegador</th>
+                  <th>Sistema</th>
+                  <th>Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {clientSummary.map((item) => (
+                  <tr key={`${item.deviceType}-${item.browserName}-${item.osName}`}>
+                    <td>{item.deviceType}</td>
+                    <td>{item.browserName}</td>
+                    <td>{item.osName}</td>
+                    <td>{item.count}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <div className="empty-state">Metadados de cliente ainda não foram coletados.</div>
+          )}
+        </div>
+      </div>
+
+      <div className="card">
+        <h2>Interações com metadados do cliente</h2>
+        {clientInteractions.length ? (
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Data</th>
+                <th>Participante</th>
+                <th>Quiz</th>
+                <th>Resultado</th>
+                <th>IP</th>
+                <th>Navegador</th>
+                <th>Dispositivo</th>
+                <th>Localização</th>
+              </tr>
+            </thead>
+            <tbody>
+              {clientInteractions.slice(0, 25).map((item) => (
+                <tr key={item.submissionId}>
+                  <td>{dayjs(item.createdAt).format('DD/MM/YYYY HH:mm')}</td>
+                  <td>{item.userName}</td>
+                  <td>{item.quizTitle}</td>
+                  <td>{item.score}/{item.total} ({item.percentage.toFixed(2)}%)</td>
+                  <td>{item.ipAddress || '-'}</td>
+                  <td>{item.browserName || '-'} {item.browserVersion || ''}</td>
+                  <td>{item.deviceType || '-'} / {item.osName || '-'}</td>
+                  <td>
+                    {Number.isFinite(item.geoLatitude) && Number.isFinite(item.geoLongitude)
+                      ? `${item.geoLatitude.toFixed(5)}, ${item.geoLongitude.toFixed(5)}`
+                      : item.geoStatus || '-'}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <div className="empty-state">Nenhuma interação com metadados foi registrada.</div>
         )}
       </div>
 

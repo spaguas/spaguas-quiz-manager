@@ -3,6 +3,7 @@ import { authenticate, requireAdmin } from '../middlewares/authMiddleware.js';
 import {
   createBadge,
   deleteBadge,
+  getAdminGamificationDashboard,
   getLeaderboard,
   getMyGamification,
   listBadges,
@@ -13,6 +14,7 @@ const router = Router();
 
 router.get('/profile', authenticate, getMyGamification);
 router.get('/leaderboard', getLeaderboard);
+router.get('/admin/dashboard', authenticate, requireAdmin, getAdminGamificationDashboard);
 router.get('/admin/badges', authenticate, requireAdmin, listBadges);
 router.post('/admin/badges', authenticate, requireAdmin, createBadge);
 router.patch('/admin/badges/:badgeId', authenticate, requireAdmin, updateBadge);

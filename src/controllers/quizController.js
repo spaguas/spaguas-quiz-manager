@@ -257,6 +257,16 @@ export async function getDashboardSummary(req, res, next) {
   }
 }
 
+export async function getQuizDashboardSummary(req, res, next) {
+  try {
+    const quizId = Number(req.params.quizId);
+    const summary = await quizService.getQuizDashboardSummary(quizId);
+    return res.json(summary);
+  } catch (error) {
+    return next(error);
+  }
+}
+
 export async function clearRanking(req, res, next) {
   try {
     const quizId = Number(req.params.quizId);

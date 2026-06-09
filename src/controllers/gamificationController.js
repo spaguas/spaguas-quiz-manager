@@ -30,6 +30,15 @@ export async function listBadges(req, res, next) {
   }
 }
 
+export async function getAdminGamificationDashboard(req, res, next) {
+  try {
+    const data = await gamificationService.getGamificationDashboard();
+    return res.json(data);
+  } catch (error) {
+    return next(error);
+  }
+}
+
 export async function createBadge(req, res, next) {
   try {
     const payload = badgeCreateSchema.parse(req.body);

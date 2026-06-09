@@ -8,6 +8,7 @@ import {
   submissionSchema,
   answerValidationSchema,
   participationCheckSchema,
+  questionCopySchema,
 } from '../validators/quizValidators.js';
 
 export async function createQuiz(req, res, next) {
@@ -29,6 +30,20 @@ export async function addQuestionToQuiz(req, res, next) {
 
     const question = await quizService.addQuestionToQuiz(payload);
     return res.status(201).json(question);
+  } catch (error) {
+    return next(error);
+  }
+}
+
+export async function copyQuestionsToQuiz(req, res, next) {
+  try {
+    const payload = questionCopySchema.parse({
+      sourceQuizId: Number(req.body.sourceQuizId),
+      targetQuizId: Number(req.params.quizId),
+    });
+
+    const result = await quizService.copyQuestionsBetweenQuizzes(payload);
+    return res.status(201).json(result);
   } catch (error) {
     return next(error);
   }
@@ -241,6 +256,16 @@ export async function clearRanking(req, res, next) {
   try {
     const quizId = Number(req.params.quizId);
     const result = await quizService.clearQuizRanking(quizId);
+    return res.json(result);
+  } catch (error) {
+    return next(error);
+  }
+}
+
+export async function resetQuizData(req, res, next) {
+  try {
+    const quizId = Number(req.params.quizId);
+    const result = await quizService.resetQuizData(quizId);
     return res.json(result);
   } catch (error) {
     return next(error);

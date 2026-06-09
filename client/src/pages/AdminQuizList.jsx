@@ -9,6 +9,7 @@ const AdminQuizList = () => {
   const [error, setError] = useState('');
   const [actionError, setActionError] = useState('');
   const [deletingId, setDeletingId] = useState(null);
+  const [resettingId, setResettingId] = useState(null);
   const navigate = useNavigate();
 
   const fetchQuizzes = useCallback(async () => {
@@ -47,6 +48,29 @@ const AdminQuizList = () => {
       setActionError(err.response?.data?.message || 'Não foi possível excluir o quiz.');
     } finally {
       setDeletingId(null);
+    }
+  };
+
+  const handleReset = async (quizId, quizTitle) => {
+    const confirmed = window.confirm(
+      `Resetar o quiz "${quizTitle}"? Esta ação remove submissões, respostas, retiradas de prêmios e recalcula as estatísticas.`,
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setResettingId(quizId);
+      setActionError('');
+      const response = await api.delete(`/admin/quizzes/${quizId}/reset`);
+      await fetchQuizzes();
+      const warning = response.data?.gamificationWarning ? `\n\n${response.data.gamificationWarning}` : '';
+      window.alert(`${response.data?.message || 'Dados do quiz resetados com sucesso.'}${warning}`);
+    } catch (err) {
+      setActionError(err.response?.data?.message || 'Não foi possível resetar os dados do quiz.');
+    } finally {
+      setResettingId(null);
     }
   };
 
@@ -138,8 +162,16 @@ const AdminQuizList = () => {
                   <button
                     className="button danger"
                     type="button"
+                    onClick={() => handleReset(quiz.id, quiz.title)}
+                    disabled={resettingId === quiz.id || deletingId === quiz.id}
+                  >
+                    {resettingId === quiz.id ? 'Resetando...' : 'Resetar dados'}
+                  </button>
+                  <button
+                    className="button danger"
+                    type="button"
                     onClick={() => handleDelete(quiz.id, quiz.title)}
-                    disabled={deletingId === quiz.id}
+                    disabled={deletingId === quiz.id || resettingId === quiz.id}
                   >
                     {deletingId === quiz.id ? 'Excluindo...' : 'Excluir quiz'}
                   </button>

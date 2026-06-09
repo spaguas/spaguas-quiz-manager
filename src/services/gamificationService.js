@@ -1,69 +1,134 @@
 import prisma from '../config/prisma.js';
+import HttpError from '../utils/httpError.js';
 
 const LEVEL_BASE = 100;
 
-const BADGE_DEFINITIONS = [
+export const BADGE_CONDITION_METRICS = [
+  'points',
+  'level',
+  'experience',
+  'totalQuizzes',
+  'totalCorrect',
+  'totalIncorrect',
+  'bestStreak',
+  'currentStreak',
+  'accuracyPercentage',
+];
+
+export const BADGE_CONDITION_OPERATORS = ['gte', 'gt', 'eq', 'lte', 'lt'];
+
+const DEFAULT_BADGES = [
   {
     code: 'FIRST_QUIZ',
     name: 'Primeiro Quiz',
     description: 'Complete um quiz pela primeira vez.',
     icon: '🥉',
-    condition: (stats) => stats.totalQuizzes >= 1,
+    conditionMetric: 'totalQuizzes',
+    conditionOperator: 'gte',
+    conditionValue: 1,
   },
   {
     code: 'FIVE_QUIZZES',
     name: 'Maratonista',
     description: 'Complete 5 quizzes.',
     icon: '🥈',
-    condition: (stats) => stats.totalQuizzes >= 5,
+    conditionMetric: 'totalQuizzes',
+    conditionOperator: 'gte',
+    conditionValue: 5,
   },
   {
     code: 'TEN_CORRECT',
     name: 'Sábio',
     description: 'Acumule 10 respostas corretas.',
     icon: '🥇',
-    condition: (stats) => stats.totalCorrect >= 10,
+    conditionMetric: 'totalCorrect',
+    conditionOperator: 'gte',
+    conditionValue: 10,
   },
   {
     code: 'STREAK_MASTER',
     name: 'Embalado',
     description: 'Faça uma sequência de 3 quizzes com 100% de acerto.',
     icon: '🏆',
-    condition: (stats) => stats.bestStreak >= 3,
+    conditionMetric: 'bestStreak',
+    conditionOperator: 'gte',
+    conditionValue: 3,
   },
 ];
 
 export async function ensureBadgesExist() {
-  await Promise.all(
-    BADGE_DEFINITIONS.map((badge) =>
-      prisma.badge.upsert({
-        where: { code: badge.code },
-        update: {
-          name: badge.name,
-          description: badge.description,
-          icon: badge.icon,
-        },
-        create: {
-          code: badge.code,
-          name: badge.name,
-          description: badge.description,
-          icon: badge.icon,
-        },
-      }),
-    ),
-  );
+  const existingBadges = await prisma.badge.findMany({
+    where: {
+      code: {
+        in: DEFAULT_BADGES.map((badge) => badge.code),
+      },
+    },
+    select: { code: true },
+  });
+  const existingCodes = new Set(existingBadges.map((badge) => badge.code));
+  const missingBadges = DEFAULT_BADGES.filter((badge) => !existingCodes.has(badge.code));
+
+  if (!missingBadges.length) {
+    return;
+  }
+
+  await prisma.badge.createMany({
+    data: missingBadges,
+    skipDuplicates: true,
+  });
 }
 
-export async function getOrCreateStats(userId) {
-  const stats = await prisma.userGamification.findUnique({ where: { userId } });
+const normalizeParticipantEmail = (email) => (email || '').trim().toLowerCase();
+
+const buildGamificationIdentity = ({ userId = null, participantEmail = null, participantName = null }) => {
+  const normalizedUserId = userId ? Number(userId) : null;
+  if (normalizedUserId) {
+    return {
+      userId: normalizedUserId,
+      participantEmail: null,
+      participantName: participantName || null,
+      statsWhere: { userId: normalizedUserId },
+      badgeWhere: { userId: normalizedUserId },
+      createData: { userId: normalizedUserId },
+    };
+  }
+
+  const normalizedEmail = normalizeParticipantEmail(participantEmail);
+  if (!normalizedEmail) {
+    throw new Error('Informe um usuário ou e-mail para registrar gamificação');
+  }
+
+  return {
+    userId: null,
+    participantEmail: normalizedEmail,
+    participantName: participantName || null,
+    statsWhere: { participantEmail: normalizedEmail },
+    badgeWhere: { participantEmail: normalizedEmail },
+    createData: {
+      participantEmail: normalizedEmail,
+      participantName: participantName || null,
+    },
+  };
+};
+
+export async function getOrCreateStats(identityInput) {
+  const identity = typeof identityInput === 'number'
+    ? buildGamificationIdentity({ userId: identityInput })
+    : buildGamificationIdentity(identityInput);
+
+  const stats = await prisma.userGamification.findUnique({ where: identity.statsWhere });
   if (stats) {
+    if (!identity.userId && identity.participantName && stats.participantName !== identity.participantName) {
+      return prisma.userGamification.update({
+        where: identity.statsWhere,
+        data: { participantName: identity.participantName },
+      });
+    }
     return stats;
   }
 
   return prisma.userGamification.create({
-    data: {
-      userId,
-    },
+    data: identity.createData,
   });
 }
 
@@ -85,35 +150,78 @@ function calculateLevel(experience) {
   };
 }
 
-async function awardBadges(userId, stats) {
+function calculateSubmissionPoints({ score, percentage }) {
+  const basePoints = Math.max(score * 10, 5);
+  const bonus = percentage === 100 ? 20 : percentage >= 70 ? 10 : 0;
+  return basePoints + bonus;
+}
+
+function getConditionMetricValue(stats, metric) {
+  if (metric === 'accuracyPercentage') {
+    const answered = stats.totalCorrect + stats.totalIncorrect;
+    return answered > 0 ? (stats.totalCorrect / answered) * 100 : 0;
+  }
+
+  return Number(stats[metric] ?? 0);
+}
+
+function evaluateBadgeCondition(badge, stats) {
+  if (!BADGE_CONDITION_METRICS.includes(badge.conditionMetric)) {
+    return false;
+  }
+
+  const currentValue = getConditionMetricValue(stats, badge.conditionMetric);
+  const targetValue = Number(badge.conditionValue);
+
+  if (!Number.isFinite(currentValue) || !Number.isFinite(targetValue)) {
+    return false;
+  }
+
+  switch (badge.conditionOperator) {
+    case 'gte':
+      return currentValue >= targetValue;
+    case 'gt':
+      return currentValue > targetValue;
+    case 'eq':
+      return currentValue === targetValue;
+    case 'lte':
+      return currentValue <= targetValue;
+    case 'lt':
+      return currentValue < targetValue;
+    default:
+      return false;
+  }
+}
+
+async function awardBadges(identity, stats) {
   await ensureBadgesExist();
 
   const existing = await prisma.userBadge.findMany({
-    where: { userId },
+    where: identity.badgeWhere,
     include: { badge: true },
   });
 
   const ownedCodes = new Set(existing.map((item) => item.badge.code));
 
-  const badgesToAward = BADGE_DEFINITIONS.filter((badge) =>
-    !ownedCodes.has(badge.code) && badge.condition(stats),
-  );
-
-  if (!badgesToAward.length) {
-    return [];
-  }
-
-  const foundBadges = await prisma.badge.findMany({
+  const badgesToAward = await prisma.badge.findMany({
     where: {
+      isActive: true,
       code: {
-        in: badgesToAward.map((badge) => badge.code),
+        notIn: Array.from(ownedCodes),
       },
     },
   });
 
+  const foundBadges = badgesToAward.filter((badge) => evaluateBadgeCondition(badge, stats));
+
+  if (!foundBadges.length) {
+    return [];
+  }
+
   await prisma.userBadge.createMany({
     data: foundBadges.map((badge) => ({
-      userId,
+      userId: identity.userId,
+      participantEmail: identity.participantEmail,
       badgeId: badge.id,
     })),
     skipDuplicates: true,
@@ -122,20 +230,84 @@ async function awardBadges(userId, stats) {
   return foundBadges;
 }
 
+const normalizeBadgeCode = (code) =>
+  (code || '')
+    .trim()
+    .toUpperCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^A-Z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+
+const normalizeBadgePayload = (data) => {
+  const payload = { ...data };
+  if (payload.code !== undefined) {
+    payload.code = normalizeBadgeCode(payload.code);
+  }
+  return payload;
+};
+
+export async function listBadges() {
+  await ensureBadgesExist();
+  return prisma.badge.findMany({
+    orderBy: [{ isActive: 'desc' }, { createdAt: 'asc' }],
+  });
+}
+
+export async function createBadge(data) {
+  const payload = normalizeBadgePayload(data);
+  const existing = await prisma.badge.findUnique({
+    where: { code: payload.code },
+  });
+  if (existing) {
+    throw new HttpError(409, 'Código de conquista já cadastrado');
+  }
+
+  return prisma.badge.create({
+    data: payload,
+  });
+}
+
+export async function updateBadge(badgeId, data) {
+  const id = Number(badgeId);
+  const payload = normalizeBadgePayload(data);
+  if (payload.code) {
+    const existing = await prisma.badge.findUnique({
+      where: { code: payload.code },
+    });
+    if (existing && existing.id !== id) {
+      throw new HttpError(409, 'Código de conquista já cadastrado');
+    }
+  }
+
+  return prisma.badge.update({
+    where: { id },
+    data: payload,
+  });
+}
+
+export async function deleteBadge(badgeId) {
+  const id = Number(badgeId);
+  await prisma.badge.delete({
+    where: { id },
+  });
+}
+
 export async function registerSubmission({
   userId,
+  participantEmail,
+  participantName,
   score,
   total,
   percentage,
 }) {
-  const basePoints = Math.max(score * 10, 5);
-  const bonus = percentage === 100 ? 20 : percentage >= 70 ? 10 : 0;
-  const pointsEarned = basePoints + bonus;
+  const identity = buildGamificationIdentity({ userId, participantEmail, participantName });
+  const pointsEarned = calculateSubmissionPoints({ score, percentage });
 
-  const stats = await getOrCreateStats(userId);
+  const stats = await getOrCreateStats(identity);
 
   const newStats = await prisma.userGamification.update({
-    where: { userId },
+    where: identity.statsWhere,
     data: {
       points: stats.points + pointsEarned,
       experience: stats.experience + pointsEarned,
@@ -153,18 +325,19 @@ export async function registerSubmission({
   const { level, nextLevelAt } = calculateLevel(newStats.experience);
 
   const finalStats = await prisma.userGamification.update({
-    where: { userId },
+    where: identity.statsWhere,
     data: {
       level,
       nextLevelAt,
     },
   });
 
-  const badges = await awardBadges(userId, finalStats);
+  const badges = await awardBadges(identity, finalStats);
 
   await prisma.gamificationEvent.create({
     data: {
-      userId,
+      userId: identity.userId,
+      participantEmail: identity.participantEmail,
       type: 'submission',
       points: pointsEarned,
       description: `Quiz concluído com ${score}/${total} acertos (${percentage}%).`,
@@ -176,7 +349,8 @@ export async function registerSubmission({
       badges.map((badge) =>
         prisma.gamificationEvent.create({
           data: {
-            userId,
+            userId: identity.userId,
+            participantEmail: identity.participantEmail,
             type: 'badge',
             points: 0,
             description: `Conquista desbloqueada: ${badge.name}`,
@@ -193,16 +367,114 @@ export async function registerSubmission({
   };
 }
 
+export async function rebuildGamificationFromSubmissions() {
+  await ensureBadgesExist();
+
+  await prisma.gamificationEvent.deleteMany();
+  await prisma.userBadge.deleteMany();
+  await prisma.userGamification.deleteMany();
+
+  const submissions = await prisma.submission.findMany({
+    orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+    select: {
+      id: true,
+      userId: true,
+      userName: true,
+      userEmail: true,
+      score: true,
+      total: true,
+      percentage: true,
+      createdAt: true,
+    },
+  });
+
+  for (const submission of submissions) {
+    if (!submission.userId && !normalizeParticipantEmail(submission.userEmail)) {
+      // eslint-disable-next-line no-continue
+      continue;
+    }
+
+    const identity = buildGamificationIdentity({
+      userId: submission.userId,
+      participantEmail: submission.userId ? null : submission.userEmail,
+      participantName: submission.userName,
+    });
+    const pointsEarned = calculateSubmissionPoints({
+      score: submission.score,
+      percentage: submission.percentage,
+    });
+    // eslint-disable-next-line no-await-in-loop
+    const stats = await getOrCreateStats(identity);
+    // eslint-disable-next-line no-await-in-loop
+    const newStats = await prisma.userGamification.update({
+      where: identity.statsWhere,
+      data: {
+        points: stats.points + pointsEarned,
+        experience: stats.experience + pointsEarned,
+        totalQuizzes: stats.totalQuizzes + 1,
+        totalCorrect: stats.totalCorrect + submission.score,
+        totalIncorrect: stats.totalIncorrect + (submission.total - submission.score),
+        currentStreak: submission.percentage === 100 ? stats.currentStreak + 1 : 0,
+        bestStreak: submission.percentage === 100
+          ? Math.max(stats.bestStreak, stats.currentStreak + 1)
+          : stats.bestStreak,
+        lastSubmissionAt: submission.createdAt,
+      },
+    });
+    const { level, nextLevelAt } = calculateLevel(newStats.experience);
+    // eslint-disable-next-line no-await-in-loop
+    const finalStats = await prisma.userGamification.update({
+      where: identity.statsWhere,
+      data: { level, nextLevelAt },
+    });
+    // eslint-disable-next-line no-await-in-loop
+    const badges = await awardBadges(identity, finalStats);
+
+    // eslint-disable-next-line no-await-in-loop
+    await prisma.gamificationEvent.create({
+      data: {
+        userId: identity.userId,
+        participantEmail: identity.participantEmail,
+        type: 'submission',
+        points: pointsEarned,
+        description: `Quiz concluído com ${submission.score}/${submission.total} acertos (${submission.percentage}%).`,
+        createdAt: submission.createdAt,
+      },
+    });
+
+    if (badges.length) {
+      // eslint-disable-next-line no-await-in-loop
+      await Promise.all(
+        badges.map((badge) =>
+          prisma.gamificationEvent.create({
+            data: {
+              userId: identity.userId,
+              participantEmail: identity.participantEmail,
+              type: 'badge',
+              points: 0,
+              description: `Conquista desbloqueada: ${badge.name}`,
+              createdAt: submission.createdAt,
+            },
+          }),
+        ),
+      );
+    }
+  }
+
+  return { rebuiltSubmissions: submissions.length };
+}
+
 export async function getUserGamification(userId) {
-  const stats = await getOrCreateStats(userId);
+  const identity = buildGamificationIdentity({ userId });
+  const stats = await getOrCreateStats(identity);
   const badges = await prisma.userBadge.findMany({
-    where: { userId },
+    where: identity.badgeWhere,
     include: { badge: true },
     orderBy: { awardedAt: 'desc' },
   });
 
   const events = await prisma.gamificationEvent.findMany({
-    where: { userId },
+    where: identity.badgeWhere,
     orderBy: { createdAt: 'desc' },
     take: 20,
   });
@@ -223,24 +495,47 @@ export async function getUserGamification(userId) {
 
 export async function getGlobalLeaderboard(limit = 20) {
   const normalizedLimit = Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : 20;
-  const submissions = await prisma.submission.findMany({
-    orderBy: { createdAt: 'asc' },
-    include: {
-      user: {
-        select: {
-          id: true,
-          name: true,
-          email: true,
+  const [submissions, gamificationStats] = await Promise.all([
+    prisma.submission.findMany({
+      orderBy: { createdAt: 'asc' },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
         },
       },
-    },
+    }),
+    prisma.userGamification.findMany({
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+      },
+    }),
+  ]);
+
+  const statsByKey = new Map();
+  gamificationStats.forEach((stats) => {
+    const email = normalizeParticipantEmail(stats.user?.email ?? stats.participantEmail);
+    const key = stats.userId ? `user:${stats.userId}` : `email:${email}`;
+    statsByKey.set(key, stats);
+    if (email) {
+      statsByKey.set(`email:${email}`, stats);
+    }
   });
 
   const participants = new Map();
 
   submissions.forEach((submission) => {
     const email = (submission.user?.email ?? submission.userEmail ?? '').trim().toLowerCase();
-    const key = email || `submission:${submission.id}`;
+    const key = submission.userId ? `user:${submission.userId}` : (email ? `email:${email}` : `submission:${submission.id}`);
     const current = participants.get(key) ?? {
       userId: submission.userId,
       name: submission.user?.name ?? submission.userName,
@@ -291,18 +586,23 @@ export async function getGlobalLeaderboard(limit = 20) {
     })
     .slice(0, normalizedLimit)
     .map((entry, index) => ({
+      ...entry,
+      stats: statsByKey.get(entry.userId ? `user:${entry.userId}` : `email:${normalizeParticipantEmail(entry.email)}`),
       position: index + 1,
+    }))
+    .map((entry) => ({
+      position: entry.position,
       userId: entry.userId,
       name: entry.name,
       email: entry.email,
-      points: entry.totalCorrect,
+      points: entry.stats?.points ?? entry.totalCorrect,
       totalDurationSeconds: entry.hasDuration ? entry.totalDurationSeconds : null,
       averageDurationSeconds: entry.hasDuration
         ? Number((entry.totalDurationSeconds / entry.totalQuizzes).toFixed(2))
         : null,
-      level: null,
+      level: entry.stats?.level ?? null,
       totalQuizzes: entry.totalQuizzes,
       totalCorrect: entry.totalCorrect,
-      bestStreak: null,
+      bestStreak: entry.stats?.bestStreak ?? null,
     }));
 }

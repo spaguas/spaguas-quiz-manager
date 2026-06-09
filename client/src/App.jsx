@@ -3,6 +3,7 @@ import Layout from './components/Layout.jsx';
 import RequireAdmin from './components/RequireAdmin.jsx';
 import RequireAuth from './components/RequireAuth.jsx';
 import AdminDashboard from './pages/AdminDashboard.jsx';
+import AdminGamification from './pages/AdminGamification.jsx';
 import AdminLogin from './pages/AdminLogin.jsx';
 import AdminQuizForm from './pages/AdminQuizForm.jsx';
 import AdminQuizList from './pages/AdminQuizList.jsx';
@@ -52,6 +53,7 @@ const App = () => (
           <Route path="/admin/quizzes/new" element={<AdminQuizForm />} />
           <Route path="/admin/quizzes/:quizId/questions" element={<AdminQuestionManager />} />
           <Route path="/admin/users" element={<AdminUserManagement />} />
+          <Route path="/admin/gamification" element={<AdminGamification />} />
         </Route>
 
         <Route element={<RequireAuth />}>

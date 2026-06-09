@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import prisma from '../config/prisma.js';
 import HttpError from '../utils/httpError.js';
 import appConfig from '../config/appConfig.js';
-import { registerSubmission } from './gamificationService.js';
+import { rebuildGamificationFromSubmissions, registerSubmission } from './gamificationService.js';
 
 const uploadsRoot = path.resolve(process.cwd(), 'uploads');
 
@@ -275,6 +275,26 @@ async function findPrizeClaimsBySubmissionIds(client, submissionIds) {
   return rows.map(normalizePrizeClaimRow);
 }
 
+async function deletePrizeClaimsBySubmissionIds(client, submissionIds) {
+  await ensurePrizeClaimTable(client);
+
+  const ids = submissionIds
+    .map((id) => Number(id))
+    .filter(Number.isFinite);
+
+  if (!ids.length) {
+    return { count: 0 };
+  }
+
+  const rows = await client.$queryRawUnsafe(`
+    DELETE FROM "SubmissionPrizeClaim"
+    WHERE "submissionId" IN (${ids.join(',')})
+    RETURNING "id"
+  `);
+
+  return { count: rows.length };
+}
+
 export async function createQuiz({
   title,
   description,
@@ -488,6 +508,82 @@ export async function addQuestionToQuiz({ quizId, text, order, options }) {
       options: true,
     },
   });
+}
+
+export async function copyQuestionsBetweenQuizzes({ sourceQuizId, targetQuizId }) {
+  const [sourceQuiz, targetQuiz] = await Promise.all([
+    prisma.quiz.findUnique({
+      where: { id: sourceQuizId },
+      include: {
+        questions: {
+          include: {
+            options: {
+              orderBy: { id: 'asc' },
+            },
+          },
+          orderBy: { order: 'asc' },
+        },
+      },
+    }),
+    prisma.quiz.findUnique({
+      where: { id: targetQuizId },
+      include: {
+        questions: {
+          select: { order: true },
+        },
+      },
+    }),
+  ]);
+
+  if (!sourceQuiz) {
+    throw new HttpError(404, 'Quiz de origem não encontrado');
+  }
+
+  if (!targetQuiz) {
+    throw new HttpError(404, 'Quiz de destino não encontrado');
+  }
+
+  if (sourceQuiz.id === targetQuiz.id) {
+    throw new HttpError(400, 'Escolha um quiz de origem diferente do quiz atual');
+  }
+
+  if (!sourceQuiz.questions.length) {
+    throw new HttpError(400, 'Quiz de origem não possui perguntas para copiar');
+  }
+
+  const initialOrder = targetQuiz.questions.length
+    ? Math.max(...targetQuiz.questions.map((question) => question.order))
+    : 0;
+
+  const createdQuestions = await prisma.$transaction(
+    sourceQuiz.questions.map((question, index) =>
+      prisma.question.create({
+        data: {
+          quizId: targetQuiz.id,
+          text: question.text,
+          order: initialOrder + index + 1,
+          options: {
+            create: question.options.map((option) => ({
+              text: option.text,
+              isCorrect: option.isCorrect,
+            })),
+          },
+        },
+        include: {
+          options: true,
+        },
+      }),
+    ),
+  );
+
+  return {
+    sourceQuizId: sourceQuiz.id,
+    sourceQuizTitle: sourceQuiz.title,
+    targetQuizId: targetQuiz.id,
+    copiedQuestions: createdQuestions.length,
+    questions: createdQuestions,
+    message: `${createdQuestions.length} pergunta(s) copiada(s) com sucesso`,
+  };
 }
 
 export async function listQuizzes() {
@@ -982,14 +1078,14 @@ export async function createSubmission({ quizId, userName, userEmail, durationSe
     },
   });
 
-  if (submissionUserId) {
-    await registerSubmission({
-      userId: submissionUserId,
-      score: submission.score,
-      total: submission.total,
-      percentage: submission.percentage,
-    });
-  }
+  await registerSubmission({
+    userId: submissionUserId,
+    participantEmail: submissionUserId ? null : normalizedEmail,
+    participantName: submission.userName,
+    score: submission.score,
+    total: submission.total,
+    percentage: submission.percentage,
+  });
 
   const position = betterResults + 1;
   const positionPrizes = quiz.prizes
@@ -1310,35 +1406,86 @@ export async function getRanking(quizId, limit = null) {
   };
 }
 
-export async function clearQuizRanking(quizId) {
+export async function resetQuizData(quizId) {
   const quiz = await prisma.quiz.findUnique({
     where: { id: quizId },
-    select: { id: true },
+    select: { id: true, title: true },
   });
 
   if (!quiz) {
     throw new HttpError(404, 'Quiz não encontrado');
   }
 
-  const deletedAnswers = await prisma.submissionAnswer.deleteMany({
-    where: {
-      submission: {
-        quizId,
+  await ensurePrizeClaimTable();
+
+  const result = await prisma.$transaction(async (tx) => {
+    const submissionIds = await tx.submission.findMany({
+      where: { quizId },
+      select: { id: true },
+    }).then((items) => items.map((item) => item.id));
+
+    const deletedPrizeClaims = await deletePrizeClaimsBySubmissionIds(tx, submissionIds);
+
+    const deletedAnswers = await tx.submissionAnswer.deleteMany({
+      where: {
+        submission: {
+          quizId,
+        },
       },
-    },
+    });
+
+    const deletedSubmissions = await tx.submission.deleteMany({
+      where: { quizId },
+    });
+
+    const prizes = await tx.quizPrize.findMany({
+      where: { quizId },
+      select: { id: true, quantity: true },
+    });
+
+    await Promise.all(
+      prizes.map((prize) =>
+        tx.quizPrize.update({
+          where: { id: prize.id },
+          data: { availableQuantity: prize.quantity },
+        }),
+      ),
+    );
+
+    return {
+      deletedPrizeClaims: deletedPrizeClaims.count,
+      deletedAnswers: deletedAnswers.count,
+      deletedSubmissions: deletedSubmissions.count,
+      restoredPrizes: prizes.length,
+    };
   });
 
-  const deletedSubmissions = await prisma.submission.deleteMany({
-    where: { quizId },
-  });
+  let gamification = { rebuiltSubmissions: 0 };
+  let gamificationWarning = null;
+
+  try {
+    gamification = await rebuildGamificationFromSubmissions();
+  } catch (error) {
+    console.error('Falha ao recalcular gamificação após reset do quiz', {
+      quizId,
+      error,
+    });
+    gamificationWarning = 'O quiz foi resetado, mas não foi possível recalcular a gamificação automaticamente.';
+  }
 
   return {
     quizId,
-    deletedSubmissions: deletedSubmissions.count,
-    deletedAnswers: deletedAnswers.count,
-    message: 'Ranking limpo com sucesso',
+    quizTitle: quiz.title,
+    ...result,
+    rebuiltGamificationSubmissions: gamification.rebuiltSubmissions,
+    gamificationWarning,
+    message: gamificationWarning
+      ? 'Dados do quiz resetados com sucesso, com aviso na gamificação'
+      : 'Dados do quiz resetados com sucesso',
   };
 }
+
+export const clearQuizRanking = resetQuizData;
 
 export async function getDashboardSummary() {
   await ensurePrizeClaimTable();

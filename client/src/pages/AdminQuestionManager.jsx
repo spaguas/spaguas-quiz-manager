@@ -46,6 +46,11 @@ const AdminQuestionManager = () => {
   const [questionFeedback, setQuestionFeedback] = useState('');
   const [form, setForm] = useState(createEmptyForm(1));
   const [deletingQuestionId, setDeletingQuestionId] = useState(null);
+  const [sourceQuizzes, setSourceQuizzes] = useState([]);
+  const [copySourceQuizId, setCopySourceQuizId] = useState('');
+  const [copyingQuestions, setCopyingQuestions] = useState(false);
+  const [copyQuestionError, setCopyQuestionError] = useState('');
+  const [copyQuestionFeedback, setCopyQuestionFeedback] = useState('');
   const [clearingRanking, setClearingRanking] = useState(false);
   const [quizDetails, setQuizDetails] = useState({
     title: '',
@@ -140,8 +145,16 @@ const AdminQuestionManager = () => {
     const fetchQuiz = async () => {
       try {
         setLoading(true);
-        const response = await api.get(`/admin/quizzes/${quizId}`);
+        const [response, quizzesResponse] = await Promise.all([
+          api.get(`/admin/quizzes/${quizId}`),
+          api.get('/admin/quizzes'),
+        ]);
         setQuiz(response.data);
+        setSourceQuizzes(
+          quizzesResponse.data
+            .filter((item) => Number(item.id) !== Number(quizId))
+            .sort((a, b) => a.title.localeCompare(b.title)),
+        );
         const nextOrder =
           response.data?.questions?.length > 0
             ? Math.max(...response.data.questions.map((question) => question.order)) + 1
@@ -201,6 +214,11 @@ const AdminQuestionManager = () => {
     }
     return Math.max(...quiz.questions.map((question) => question.order)) + 1;
   }, [quiz]);
+
+  const selectedSourceQuiz = useMemo(
+    () => sourceQuizzes.find((item) => Number(item.id) === Number(copySourceQuizId)) ?? null,
+    [copySourceQuizId, sourceQuizzes],
+  );
 
   const handleQuizDetailChange = (field) => (event) => {
     const { value } = event.target;
@@ -689,23 +707,79 @@ const AdminQuestionManager = () => {
     }
   };
 
+  const handleCopyQuestions = async (event) => {
+    event.preventDefault();
+    setFormError('');
+    setQuestionFeedback('');
+    setCopyQuestionError('');
+    setCopyQuestionFeedback('');
+    setQuizFeedback('');
+    setQuizError('');
+
+    const sourceQuizId = Number(copySourceQuizId);
+    if (!Number.isInteger(sourceQuizId) || sourceQuizId <= 0) {
+      setCopyQuestionError('Selecione o quiz de origem.');
+      return;
+    }
+
+    const sourceQuestionCount = selectedSourceQuiz?.questions?.length ?? 0;
+    if (sourceQuestionCount === 0) {
+      setCopyQuestionError('O quiz de origem não possui perguntas cadastradas.');
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Copiar ${sourceQuestionCount} pergunta(s) de "${selectedSourceQuiz.title}" para este quiz?`,
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setCopyingQuestions(true);
+      const response = await api.post(`/admin/quizzes/${quizId}/questions/copy`, {
+        sourceQuizId,
+      });
+      const copiedQuestions = response.data?.questions ?? [];
+      setQuiz((prev) => ({
+        ...prev,
+        questions: [...(prev.questions || []), ...copiedQuestions].sort((a, b) => a.order - b.order),
+      }));
+
+      if (copiedQuestions.length) {
+        const lastOrder = Math.max(...copiedQuestions.map((question) => question.order));
+        setForm(createEmptyForm(lastOrder + 1));
+      }
+
+      setCopySourceQuizId('');
+      setCopyQuestionFeedback(response.data?.message || 'Perguntas copiadas com sucesso.');
+    } catch (err) {
+      setCopyQuestionError(err.response?.data?.message || 'Não foi possível copiar as perguntas.');
+    } finally {
+      setCopyingQuestions(false);
+    }
+  };
+
   const handleClearRanking = async () => {
     setFormError('');
     setQuestionFeedback('');
     setQuizError('');
     setQuizFeedback('');
 
-    const confirmed = window.confirm('Tem certeza de que deseja limpar todo o ranking deste quiz? Esta ação remove definitivamente todas as submissões.');
+    const confirmed = window.confirm(
+      'Resetar este quiz? Esta ação remove definitivamente submissões, respostas, retiradas de prêmios e recalcula as estatísticas.',
+    );
     if (!confirmed) {
       return;
     }
 
     try {
       setClearingRanking(true);
-      const response = await api.delete(`/admin/quizzes/${quizId}/ranking`);
-      setQuizFeedback(response.data?.message || 'Ranking limpo com sucesso.');
+      const response = await api.delete(`/admin/quizzes/${quizId}/reset`);
+      const warning = response.data?.gamificationWarning ? ` ${response.data.gamificationWarning}` : '';
+      setQuizFeedback(`${response.data?.message || 'Dados do quiz resetados com sucesso.'}${warning}`);
     } catch (err) {
-      setQuizError(err.response?.data?.message || 'Não foi possível limpar o ranking.');
+      setQuizError(err.response?.data?.message || 'Não foi possível resetar os dados do quiz.');
     } finally {
       setClearingRanking(false);
     }
@@ -816,7 +890,7 @@ const AdminQuestionManager = () => {
             onClick={handleClearRanking}
             disabled={clearingRanking}
           >
-            {clearingRanking ? 'Limpando...' : 'Limpar ranking'}
+            {clearingRanking ? 'Resetando...' : 'Resetar dados'}
           </button>
           <button className="button" type="button" onClick={() => navigate('/admin/quizzes')}>
             Voltar à lista
@@ -1134,6 +1208,62 @@ const AdminQuestionManager = () => {
         <div className="form-actions">
           <button className="button" type="submit" disabled={savingPrizes}>
             {savingPrizes ? 'Salvando...' : 'Salvar prêmios'}
+          </button>
+        </div>
+      </form>
+
+      <form className="card form-grid" onSubmit={handleCopyQuestions}>
+        <div className="section-heading">
+          <div>
+            <h2>Copiar perguntas de outro quiz</h2>
+            <p className="page-description">
+              Reaproveite perguntas já cadastradas. As cópias serão adicionadas ao final da ordem atual.
+            </p>
+          </div>
+        </div>
+
+        <div className="form-field">
+          <label htmlFor="copy-source-quiz">Quiz de origem</label>
+          <select
+            id="copy-source-quiz"
+            value={copySourceQuizId}
+            onChange={(event) => {
+              setCopySourceQuizId(event.target.value);
+              setCopyQuestionError('');
+              setCopyQuestionFeedback('');
+            }}
+          >
+            <option value="">Selecione um quiz</option>
+            {sourceQuizzes.map((item) => {
+              const questionCount = item.questions?.length ?? 0;
+              return (
+                <option key={item.id} value={item.id} disabled={questionCount === 0}>
+                  {item.title} - {questionCount} pergunta(s)
+                </option>
+              );
+            })}
+          </select>
+        </div>
+
+        {selectedSourceQuiz && (
+          <div className="stat-list">
+            <div className="stat-item">
+              <strong>Origem selecionada</strong>
+              <span>{selectedSourceQuiz.title}</span>
+            </div>
+            <div className="stat-item">
+              <strong>Perguntas a copiar</strong>
+              <span>{selectedSourceQuiz.questions?.length ?? 0}</span>
+            </div>
+          </div>
+        )}
+
+        {copyQuestionError && <div className="page-error" style={{ margin: 0 }}>{copyQuestionError}</div>}
+        {copyQuestionFeedback && <div className="tag success">{copyQuestionFeedback}</div>}
+
+        <div className="form-actions">
+          <button className="button secondary" type="submit" disabled={copyingQuestions || !copySourceQuizId}>
+            {copyingQuestions ? 'Copiando...' : 'Copiar perguntas'}
           </button>
         </div>
       </form>

@@ -112,7 +112,9 @@ CREATE TABLE "PasswordResetToken" (
 
 CREATE TABLE "UserGamification" (
   "id" SERIAL PRIMARY KEY,
-  "userId" INTEGER NOT NULL UNIQUE,
+  "userId" INTEGER UNIQUE,
+  "participantEmail" TEXT UNIQUE,
+  "participantName" TEXT,
   "points" INTEGER NOT NULL DEFAULT 0,
   "level" INTEGER NOT NULL DEFAULT 1,
   "experience" INTEGER NOT NULL DEFAULT 0,
@@ -134,23 +136,30 @@ CREATE TABLE "Badge" (
   "name" TEXT NOT NULL,
   "description" TEXT NOT NULL,
   "icon" TEXT NOT NULL,
+  "conditionMetric" TEXT NOT NULL DEFAULT 'totalQuizzes',
+  "conditionOperator" TEXT NOT NULL DEFAULT 'gte',
+  "conditionValue" DOUBLE PRECISION NOT NULL DEFAULT 1,
+  "isActive" BOOLEAN NOT NULL DEFAULT true,
   "createdAt" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   "updatedAt" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE "UserBadge" (
   "id" SERIAL PRIMARY KEY,
-  "userId" INTEGER NOT NULL,
+  "userId" INTEGER,
+  "participantEmail" TEXT,
   "badgeId" INTEGER NOT NULL,
   "awardedAt" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT "UserBadge_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE,
   CONSTRAINT "UserBadge_badgeId_fkey" FOREIGN KEY ("badgeId") REFERENCES "Badge"("id") ON DELETE CASCADE,
-  CONSTRAINT "UserBadge_userId_badgeId_key" UNIQUE ("userId", "badgeId")
+  CONSTRAINT "UserBadge_userId_badgeId_key" UNIQUE ("userId", "badgeId"),
+  CONSTRAINT "UserBadge_participantEmail_badgeId_key" UNIQUE ("participantEmail", "badgeId")
 );
 
 CREATE TABLE "GamificationEvent" (
   "id" SERIAL PRIMARY KEY,
-  "userId" INTEGER NOT NULL,
+  "userId" INTEGER,
+  "participantEmail" TEXT,
   "type" TEXT NOT NULL,
   "points" INTEGER NOT NULL,
   "description" TEXT NOT NULL,

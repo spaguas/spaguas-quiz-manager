@@ -158,8 +158,10 @@ model PasswordResetToken {
 
 model UserGamification {
   id                Int      @id @default(autoincrement())
-  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId            Int      @unique
+  user              User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId            Int?     @unique
+  participantEmail  String?  @unique
+  participantName   String?
   points            Int      @default(0)
   level             Int      @default(1)
   experience        Int      @default(0)
@@ -175,35 +177,43 @@ model UserGamification {
 }
 
 model Badge {
-  id          Int      @id @default(autoincrement())
-  code        String   @unique
-  name        String
-  description String
-  icon        String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  userBadges  UserBadge[]
+  id                Int      @id @default(autoincrement())
+  code              String   @unique
+  name              String
+  description       String
+  icon              String
+  conditionMetric   String   @default("totalQuizzes")
+  conditionOperator String   @default("gte")
+  conditionValue    Float    @default(1)
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  userBadges        UserBadge[]
 }
 
 model UserBadge {
   id        Int      @id @default(autoincrement())
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId    Int
+  user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    Int?
+  participantEmail String?
   badge     Badge    @relation(fields: [badgeId], references: [id], onDelete: Cascade)
   badgeId   Int
   awardedAt DateTime @default(now())
 
   @@unique([userId, badgeId])
+  @@unique([participantEmail, badgeId])
 }
 
 model GamificationEvent {
   id          Int      @id @default(autoincrement())
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId      Int
+  user        User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId      Int?
+  participantEmail String?
   type        String
   points      Int
   description String
   createdAt   DateTime @default(now())
 
   @@index([userId])
+  @@index([participantEmail])
 }

@@ -164,6 +164,14 @@ export const questionCreateSchema = z.object({
   path: ['options'],
 });
 
+export const questionCopySchema = z.object({
+  targetQuizId: z.number().int().positive(),
+  sourceQuizId: z.number().int().positive(),
+}).refine((data) => data.targetQuizId !== data.sourceQuizId, {
+  message: 'Escolha um quiz de origem diferente do quiz atual',
+  path: ['sourceQuizId'],
+});
+
 export const submissionSchema = z.object({
   quizId: z.number().int().positive(),
   userName: z.string().min(2, 'Nome deve ter ao menos 2 caracteres'),

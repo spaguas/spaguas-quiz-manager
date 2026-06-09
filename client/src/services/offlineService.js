@@ -2,6 +2,21 @@ const QUIZ_LIST_CACHE_KEY = 'spaguas.quiz.offline.quizList';
 const QUIZ_DETAIL_CACHE_PREFIX = 'spaguas.quiz.offline.quiz.';
 const SUBMISSION_QUEUE_KEY = 'spaguas.quiz.offline.submissions';
 const QUEUE_UPDATED_EVENT = 'spaguas-offline-queue-updated';
+const OFFLINE_CACHE_PROGRESS_EVENT = 'spaguas-offline-cache-progress';
+
+const sanitizeBasePath = (value) => {
+  if (!value) {
+    return '';
+  }
+  const trimmed = value.trim();
+  if (!trimmed || trimmed === '/') {
+    return '';
+  }
+  const withLeading = trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
+  return withLeading.replace(/\/+$/, '');
+};
+
+const basePath = sanitizeBasePath(import.meta.env.VITE_BASE_PATH ?? '/quiz');
 
 const safeParse = (value, fallback) => {
   if (!value) {
@@ -70,6 +85,89 @@ export const cacheQuizDetail = (quiz) => {
 export const getCachedQuizDetail = (quizId) =>
   readStorage(`${QUIZ_DETAIL_CACHE_PREFIX}${quizId}`, null);
 
+const normalizeRouteForCache = (route) => {
+  if (!route) {
+    return basePath || '/';
+  }
+
+  if (/^https?:\/\//i.test(route)) {
+    return route;
+  }
+
+  const normalizedRoute = route.startsWith('/') ? route : `/${route}`;
+  if (basePath && normalizedRoute.startsWith(`${basePath}/`)) {
+    return normalizedRoute;
+  }
+
+  return `${basePath}${normalizedRoute}`.replace(/\/{2,}/g, '/');
+};
+
+export const preCacheOfflineRoutes = async (routes = []) => {
+  if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) {
+    return;
+  }
+
+  const urls = Array.from(new Set([
+    normalizeRouteForCache('/'),
+    normalizeRouteForCache('/play'),
+    normalizeRouteForCache('/leaderboard'),
+    ...routes.map(normalizeRouteForCache),
+  ]));
+
+  try {
+    const registration = await navigator.serviceWorker.ready;
+    const worker = navigator.serviceWorker.controller || registration.active || registration.waiting;
+    worker?.postMessage({
+      type: 'PRE_CACHE_URLS',
+      urls,
+    });
+  } catch (error) {
+    // O cache offline é uma melhoria progressiva; falhas aqui não devem bloquear o quiz.
+  }
+};
+
+export const subscribeOfflineCacheProgress = (callback) => {
+  if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) {
+    return () => {};
+  }
+
+  const handleMessage = (event) => {
+    if (event.data?.type !== 'OFFLINE_CACHE_PROGRESS') {
+      return;
+    }
+
+    const detail = {
+      status: event.data.status,
+      total: Number(event.data.total) || 0,
+      completed: Number(event.data.completed) || 0,
+      failed: Number(event.data.failed) || 0,
+      url: event.data.url || '',
+    };
+    callback(detail);
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent(OFFLINE_CACHE_PROGRESS_EVENT, { detail }));
+    }
+  };
+
+  navigator.serviceWorker.addEventListener('message', handleMessage);
+  return () => navigator.serviceWorker.removeEventListener('message', handleMessage);
+};
+
+export const preCacheCurrentPageAssets = () => {
+  if (typeof document === 'undefined') {
+    return;
+  }
+
+  const urls = [
+    ...Array.from(document.querySelectorAll('script[src]')).map((item) => item.src),
+    ...Array.from(document.querySelectorAll('link[rel="stylesheet"][href]')).map((item) => item.href),
+    ...Array.from(document.querySelectorAll('img[src]')).map((item) => item.currentSrc || item.src),
+  ].filter(Boolean);
+
+  return preCacheOfflineRoutes(urls);
+};
+
 export const getPendingSubmissions = () => readStorage(SUBMISSION_QUEUE_KEY, []);
 
 const setPendingSubmissions = (items) => {
@@ -133,4 +231,4 @@ export const syncPendingSubmissions = async (apiClient) => {
   return { synced, failed, remaining: remaining.length };
 };
 
-export { QUEUE_UPDATED_EVENT };
+export { OFFLINE_CACHE_PROGRESS_EVENT, QUEUE_UPDATED_EVENT };

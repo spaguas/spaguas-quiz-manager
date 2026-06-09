@@ -7,6 +7,7 @@ import {
   cacheQuizList,
   getCachedQuizList,
   isNetworkError,
+  preCacheOfflineRoutes,
 } from '../services/offlineService.js';
 
 const PlayerQuizList = () => {
@@ -22,6 +23,14 @@ const PlayerQuizList = () => {
         const response = await api.get('/quizzes');
         setQuizzes(response.data);
         cacheQuizList(response.data);
+        preCacheOfflineRoutes(
+          response.data.flatMap((quiz) => [
+            `/play/quiz/${quiz.id}`,
+            `/play/quiz/${quiz.id}/ranking`,
+            `/api/quizzes/${quiz.id}`,
+            `/api/quizzes/${quiz.id}/ranking`,
+          ]),
+        );
         void Promise.allSettled(
           response.data
             .filter((quiz) => quiz.questionCount > 0)

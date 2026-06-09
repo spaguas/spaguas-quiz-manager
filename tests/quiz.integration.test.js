@@ -413,6 +413,9 @@ describe('Quiz API integration', () => {
       email: 'temporario-rapido@example.com',
       totalCorrect: 2,
       totalDurationSeconds: 10,
+      points: 40,
+      level: 1,
+      bestStreak: 1,
       position: 1,
     });
     expect(globalRankingRes.body[1]).toMatchObject({

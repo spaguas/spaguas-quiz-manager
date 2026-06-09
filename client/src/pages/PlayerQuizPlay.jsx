@@ -86,6 +86,109 @@ const buildYouTubeBackgroundUrl = (url, { start, end, loop, muted }) => {
   return `https://www.youtube.com/embed/${videoId}?${params.toString()}`;
 };
 
+const detectBrowser = (userAgent = '') => {
+  const patterns = [
+    ['Edge', /Edg\/([\d.]+)/],
+    ['Chrome', /Chrome\/([\d.]+)/],
+    ['Firefox', /Firefox\/([\d.]+)/],
+    ['Safari', /Version\/([\d.]+).*Safari/],
+  ];
+  const browser = patterns.find(([, pattern]) => pattern.test(userAgent));
+  const match = browser ? userAgent.match(browser[1]) : null;
+  return {
+    browserName: browser?.[0] ?? null,
+    browserVersion: match?.[1] ?? null,
+  };
+};
+
+const detectOs = (userAgent = '') => {
+  if (/iPhone|iPad|iPod/i.test(userAgent)) return 'iOS';
+  if (/Android/i.test(userAgent)) return 'Android';
+  if (/Windows NT/i.test(userAgent)) return 'Windows';
+  if (/Mac OS X/i.test(userAgent)) return 'macOS';
+  if (/Linux/i.test(userAgent)) return 'Linux';
+  return null;
+};
+
+const detectDeviceType = (userAgent = '') => {
+  if (/Mobi|Android|iPhone|iPod/i.test(userAgent)) return 'mobile';
+  if (/iPad|Tablet/i.test(userAgent)) return 'tablet';
+  return 'desktop';
+};
+
+const getBrowserLocation = () =>
+  new Promise((resolve) => {
+    if (!navigator.geolocation) {
+      resolve({ geoStatus: 'unavailable' });
+      return;
+    }
+
+    const timeout = window.setTimeout(() => resolve({ geoStatus: 'timeout' }), 1500);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        window.clearTimeout(timeout);
+        resolve({
+          geoStatus: 'granted',
+          geoLatitude: position.coords.latitude,
+          geoLongitude: position.coords.longitude,
+          geoAccuracy: position.coords.accuracy,
+        });
+      },
+      (error) => {
+        window.clearTimeout(timeout);
+        resolve({
+          geoStatus: error.code === error.PERMISSION_DENIED ? 'denied' : 'error',
+        });
+      },
+      {
+        enableHighAccuracy: false,
+        maximumAge: 300000,
+        timeout: 1200,
+      },
+    );
+  });
+
+const collectClientMetadata = async () => {
+  const userAgent = navigator.userAgent || '';
+  const location = await getBrowserLocation();
+  const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+  const screenResolution = typeof window !== 'undefined'
+    ? `${window.screen.width}x${window.screen.height}`
+    : null;
+  const viewport = typeof window !== 'undefined'
+    ? `${window.innerWidth}x${window.innerHeight}`
+    : null;
+
+  return {
+    userAgent,
+    ...detectBrowser(userAgent),
+    osName: detectOs(userAgent),
+    deviceType: detectDeviceType(userAgent),
+    locale: navigator.language || null,
+    languages: navigator.languages || [],
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || null,
+    screenResolution,
+    viewport,
+    colorDepth: window.screen?.colorDepth ?? null,
+    pixelRatio: window.devicePixelRatio ?? null,
+    referrer: document.referrer || null,
+    platform: navigator.platform || null,
+    hardwareConcurrency: navigator.hardwareConcurrency ?? null,
+    deviceMemory: navigator.deviceMemory ?? null,
+    maxTouchPoints: navigator.maxTouchPoints ?? null,
+    online: navigator.onLine,
+    connection: connection
+      ? {
+          effectiveType: connection.effectiveType ?? null,
+          downlink: connection.downlink ?? null,
+          rtt: connection.rtt ?? null,
+          saveData: connection.saveData ?? null,
+        }
+      : null,
+    ...location,
+  };
+};
+
 const PlayerQuizPlay = () => {
   const { quizId } = useParams();
   const navigate = useNavigate();
@@ -462,6 +565,7 @@ const PlayerQuizPlay = () => {
       userName,
       userEmail,
       durationSeconds: Math.max(1, Math.ceil((Date.now() - (quizStartedAt ?? Date.now())) / 1000)),
+      clientMetadata: await collectClientMetadata(),
       answers: quiz.questions.map((question) => ({
         questionId: question.id,
         optionId: responses[question.id]?.selectedOptionId,

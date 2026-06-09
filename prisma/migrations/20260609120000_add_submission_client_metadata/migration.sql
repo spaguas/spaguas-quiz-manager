@@ -1,0 +1,17 @@
+ALTER TABLE "Submission" ADD COLUMN "ipAddress" TEXT;
+ALTER TABLE "Submission" ADD COLUMN "ipSource" TEXT;
+ALTER TABLE "Submission" ADD COLUMN "userAgent" TEXT;
+ALTER TABLE "Submission" ADD COLUMN "browserName" TEXT;
+ALTER TABLE "Submission" ADD COLUMN "browserVersion" TEXT;
+ALTER TABLE "Submission" ADD COLUMN "osName" TEXT;
+ALTER TABLE "Submission" ADD COLUMN "deviceType" TEXT;
+ALTER TABLE "Submission" ADD COLUMN "locale" TEXT;
+ALTER TABLE "Submission" ADD COLUMN "timezone" TEXT;
+ALTER TABLE "Submission" ADD COLUMN "screenResolution" TEXT;
+ALTER TABLE "Submission" ADD COLUMN "referrer" TEXT;
+ALTER TABLE "Submission" ADD COLUMN "geoLatitude" DOUBLE PRECISION;
+ALTER TABLE "Submission" ADD COLUMN "geoLongitude" DOUBLE PRECISION;
+ALTER TABLE "Submission" ADD COLUMN "geoAccuracy" DOUBLE PRECISION;
+ALTER TABLE "Submission" ADD COLUMN "geoStatus" TEXT;
+ALTER TABLE "Submission" ADD COLUMN "clientMetadata" JSONB;
+ALTER TABLE "Submission" ADD COLUMN "requestMetadata" JSONB;

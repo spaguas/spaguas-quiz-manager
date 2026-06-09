@@ -108,6 +108,23 @@ model Submission {
   total      Int
   percentage Float
   durationSeconds Int?
+  ipAddress  String?
+  ipSource   String?
+  userAgent  String?
+  browserName String?
+  browserVersion String?
+  osName     String?
+  deviceType String?
+  locale     String?
+  timezone   String?
+  screenResolution String?
+  referrer   String?
+  geoLatitude Float?
+  geoLongitude Float?
+  geoAccuracy Float?
+  geoStatus  String?
+  clientMetadata Json?
+  requestMetadata Json?
   createdAt  DateTime           @default(now())
   answers    SubmissionAnswer[]
   prizeClaims SubmissionPrizeClaim[]

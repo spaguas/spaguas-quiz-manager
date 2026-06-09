@@ -196,7 +196,12 @@ export async function createSubmission(req, res, next) {
       quizId: Number(req.params.quizId),
     });
 
-    const result = await quizService.createSubmission(payload, req.user);
+    const result = await quizService.createSubmission(payload, req.user, {
+      ip: req.ip,
+      ips: req.ips,
+      headers: req.headers,
+      socketRemoteAddress: req.socket?.remoteAddress,
+    });
     return res.status(201).json(result);
   } catch (error) {
     return next(error);

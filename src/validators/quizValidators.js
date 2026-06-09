@@ -177,6 +177,21 @@ export const submissionSchema = z.object({
   userName: z.string().min(2, 'Nome deve ter ao menos 2 caracteres'),
   userEmail: z.string().trim().email('Informe um e-mail válido'),
   durationSeconds: z.number().int().positive().optional(),
+  clientMetadata: z.object({
+    userAgent: z.string().trim().max(1000).optional().nullable(),
+    browserName: z.string().trim().max(120).optional().nullable(),
+    browserVersion: z.string().trim().max(120).optional().nullable(),
+    osName: z.string().trim().max(120).optional().nullable(),
+    deviceType: z.string().trim().max(80).optional().nullable(),
+    locale: z.string().trim().max(80).optional().nullable(),
+    timezone: z.string().trim().max(120).optional().nullable(),
+    screenResolution: z.string().trim().max(80).optional().nullable(),
+    referrer: z.string().trim().max(1000).optional().nullable(),
+    geoLatitude: z.number().min(-90).max(90).optional().nullable(),
+    geoLongitude: z.number().min(-180).max(180).optional().nullable(),
+    geoAccuracy: z.number().min(0).optional().nullable(),
+    geoStatus: z.string().trim().max(80).optional().nullable(),
+  }).passthrough().optional(),
   answers: z.array(
     z.object({
       questionId: z.number().int().positive(),

@@ -944,7 +944,150 @@ const compareRankingEntries = (a, b) => {
   return a.id - b.id;
 };
 
-export async function createSubmission({ quizId, userName, userEmail, durationSeconds, answers }, actor = null) {
+const firstHeaderValue = (value) => {
+  if (Array.isArray(value)) {
+    return value[0] ?? null;
+  }
+  return value ?? null;
+};
+
+const normalizeIpAddress = (value) => {
+  if (!value) {
+    return null;
+  }
+  const first = String(value).split(',')[0].trim();
+  return first.replace(/^::ffff:/, '') || null;
+};
+
+const extractRequestIp = (requestInfo = {}) => {
+  const headers = requestInfo.headers ?? {};
+  const forwardedFor = firstHeaderValue(headers['x-forwarded-for']);
+  const realIp = firstHeaderValue(headers['x-real-ip']);
+  const cfIp = firstHeaderValue(headers['cf-connecting-ip']);
+  const ips = Array.isArray(requestInfo.ips) && requestInfo.ips.length ? requestInfo.ips[0] : null;
+
+  return {
+    ipAddress: normalizeIpAddress(cfIp || realIp || forwardedFor || ips || requestInfo.ip || requestInfo.socketRemoteAddress),
+    ipSource: cfIp
+      ? 'cf-connecting-ip'
+      : realIp
+        ? 'x-real-ip'
+        : forwardedFor
+          ? 'x-forwarded-for'
+          : ips
+            ? 'req.ips'
+            : requestInfo.ip
+              ? 'req.ip'
+              : 'socket.remoteAddress',
+  };
+};
+
+const parseUserAgent = (userAgent = '') => {
+  const value = String(userAgent || '');
+  const browserPatterns = [
+    ['Edge', /Edg\/([\d.]+)/],
+    ['Chrome', /Chrome\/([\d.]+)/],
+    ['Firefox', /Firefox\/([\d.]+)/],
+    ['Safari', /Version\/([\d.]+).*Safari/],
+  ];
+  const osPatterns = [
+    ['Windows', /Windows NT/],
+    ['macOS', /Mac OS X/],
+    ['iOS', /iPhone|iPad|iPod/],
+    ['Android', /Android/],
+    ['Linux', /Linux/],
+  ];
+  const browser = browserPatterns.find(([, pattern]) => pattern.test(value));
+  const os = osPatterns.find(([, pattern]) => pattern.test(value));
+  const browserMatch = browser ? value.match(browser[1]) : null;
+
+  return {
+    browserName: browser?.[0] ?? null,
+    browserVersion: browserMatch?.[1] ?? null,
+    osName: os?.[0] ?? null,
+    deviceType: /Mobi|Android|iPhone|iPod/i.test(value)
+      ? 'mobile'
+      : /iPad|Tablet/i.test(value)
+        ? 'tablet'
+        : 'desktop',
+  };
+};
+
+const buildSubmissionMetadata = (clientMetadata = {}, requestInfo = {}) => {
+  const headers = requestInfo.headers ?? {};
+  const userAgent = clientMetadata.userAgent || firstHeaderValue(headers['user-agent']) || null;
+  const parsedUserAgent = parseUserAgent(userAgent);
+  const { ipAddress, ipSource } = extractRequestIp(requestInfo);
+
+  return {
+    ipAddress,
+    ipSource,
+    userAgent,
+    browserName: clientMetadata.browserName || parsedUserAgent.browserName,
+    browserVersion: clientMetadata.browserVersion || parsedUserAgent.browserVersion,
+    osName: clientMetadata.osName || parsedUserAgent.osName,
+    deviceType: clientMetadata.deviceType || parsedUserAgent.deviceType,
+    locale: clientMetadata.locale || firstHeaderValue(headers['accept-language']) || null,
+    timezone: clientMetadata.timezone || null,
+    screenResolution: clientMetadata.screenResolution || null,
+    referrer: clientMetadata.referrer || firstHeaderValue(headers.referer) || null,
+    geoLatitude: clientMetadata.geoLatitude ?? null,
+    geoLongitude: clientMetadata.geoLongitude ?? null,
+    geoAccuracy: clientMetadata.geoAccuracy ?? null,
+    geoStatus: clientMetadata.geoStatus || null,
+    clientMetadata: clientMetadata ?? null,
+    requestMetadata: {
+      acceptLanguage: firstHeaderValue(headers['accept-language']) || null,
+      origin: firstHeaderValue(headers.origin) || null,
+      referer: firstHeaderValue(headers.referer) || null,
+      host: firstHeaderValue(headers.host) || null,
+      forwardedFor: firstHeaderValue(headers['x-forwarded-for']) || null,
+      realIp: firstHeaderValue(headers['x-real-ip']) || null,
+      cfConnectingIp: firstHeaderValue(headers['cf-connecting-ip']) || null,
+    },
+  };
+};
+
+async function persistSubmissionMetadata(submissionId, metadata) {
+  try {
+    await prisma.$executeRaw`
+      UPDATE "Submission"
+      SET
+        "ipAddress" = ${metadata.ipAddress},
+        "ipSource" = ${metadata.ipSource},
+        "userAgent" = ${metadata.userAgent},
+        "browserName" = ${metadata.browserName},
+        "browserVersion" = ${metadata.browserVersion},
+        "osName" = ${metadata.osName},
+        "deviceType" = ${metadata.deviceType},
+        "locale" = ${metadata.locale},
+        "timezone" = ${metadata.timezone},
+        "screenResolution" = ${metadata.screenResolution},
+        "referrer" = ${metadata.referrer},
+        "geoLatitude" = ${metadata.geoLatitude},
+        "geoLongitude" = ${metadata.geoLongitude},
+        "geoAccuracy" = ${metadata.geoAccuracy},
+        "geoStatus" = ${metadata.geoStatus},
+        "clientMetadata" = ${JSON.stringify(metadata.clientMetadata ?? {})}::jsonb,
+        "requestMetadata" = ${JSON.stringify(metadata.requestMetadata ?? {})}::jsonb
+      WHERE "id" = ${submissionId}
+    `;
+  } catch (error) {
+    console.warn('Não foi possível persistir metadados da submissão.', {
+      submissionId,
+      error,
+    });
+  }
+}
+
+export async function createSubmission({
+  quizId,
+  userName,
+  userEmail,
+  durationSeconds,
+  answers,
+  clientMetadata = {},
+}, actor = null, requestInfo = {}) {
   const quiz = await prisma.quiz.findUnique({
     where: { id: quizId },
     include: {
@@ -1039,11 +1182,12 @@ export async function createSubmission({ quizId, userName, userEmail, durationSe
       select: { id: true },
     });
 
-    if (existingUser) {
+  if (existingUser) {
       submissionUserId = existingUser.id;
     }
   }
 
+  const submissionMetadata = buildSubmissionMetadata(clientMetadata, requestInfo);
   const submission = await prisma.submission.create({
     data: {
       quizId,
@@ -1059,6 +1203,8 @@ export async function createSubmission({ quizId, userName, userEmail, durationSe
       },
     },
   });
+
+  await persistSubmissionMetadata(submission.id, submissionMetadata);
 
   const betterResults = await prisma.submission.count({
     where: {

@@ -32,6 +32,8 @@ const prizeSchema = z.object({
   description: z.string().trim().optional().nullable(),
   quantity: z.number().int().min(1, 'Informe uma quantidade maior que zero'),
   availableQuantity: z.number().int().min(0, 'Estoque disponível não pode ser negativo'),
+  minimumScore: z.number().int().min(0, 'Pontuação mínima não pode ser negativa').default(0),
+  minimumPercentage: z.number().min(0, 'Percentual mínimo não pode ser negativo').max(100, 'Percentual mínimo não pode ser maior que 100').default(0),
 }).refine((data) => data.availableQuantity <= data.quantity, {
   message: 'Estoque disponível não pode ser maior que a quantidade total',
   path: ['availableQuantity'],

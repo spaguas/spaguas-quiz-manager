@@ -1,0 +1,2 @@
+ALTER TABLE "QuizPrize"
+ADD COLUMN "minimumScore" INTEGER NOT NULL DEFAULT 0;

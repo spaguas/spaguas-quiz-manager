@@ -64,6 +64,8 @@ model QuizPrize {
   description       String?
   quantity          Int
   availableQuantity Int
+  minimumScore      Int      @default(0)
+  minimumPercentage Float    @default(0)
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
   claims            SubmissionPrizeClaim[]

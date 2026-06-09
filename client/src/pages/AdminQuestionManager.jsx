@@ -18,6 +18,8 @@ const createEmptyPrize = () => ({
   description: '',
   quantity: '1',
   availableQuantity: '1',
+  minimumScore: '0',
+  minimumPercentage: '0',
 });
 
 const normalizePrizeRows = (prizes = []) =>
@@ -29,6 +31,8 @@ const normalizePrizeRows = (prizes = []) =>
     description: prize.description ?? '',
     quantity: String(prize.quantity ?? 1),
     availableQuantity: String(prize.availableQuantity ?? prize.quantity ?? 1),
+    minimumScore: String(prize.minimumScore ?? 0),
+    minimumPercentage: String(prize.minimumPercentage ?? 0),
   }));
 
 const AdminQuestionManager = () => {
@@ -720,6 +724,7 @@ const AdminQuestionManager = () => {
       const position = Number(prize.position);
       const quantity = Number(prize.quantity);
       const availableQuantity = Number(prize.availableQuantity);
+      const minimumPercentage = Number(prize.minimumPercentage);
       const name = prize.name.trim();
       const description = prize.description.trim();
       const label = `Prêmio ${index + 1}`;
@@ -749,12 +754,19 @@ const AdminQuestionManager = () => {
         return;
       }
 
+      if (!Number.isFinite(minimumPercentage) || minimumPercentage < 0 || minimumPercentage > 100) {
+        setPrizeError(`${label}: informe um percentual mínimo entre 0 e 100.`);
+        return;
+      }
+
       normalizedPrizes.push({
         position,
         name,
         description: description || null,
         quantity,
         availableQuantity,
+        minimumScore: 0,
+        minimumPercentage,
       });
     }
 
@@ -1084,6 +1096,19 @@ const AdminQuestionManager = () => {
                       min="0"
                       value={prize.availableQuantity}
                       onChange={handlePrizeChange(index, 'availableQuantity')}
+                    />
+                  </div>
+                  <div className="form-field">
+                    <label htmlFor={`prize-minimum-percentage-${prize.localId}`}>Percentual mínimo de acertos</label>
+                    <input
+                      id={`prize-minimum-percentage-${prize.localId}`}
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.01"
+                      value={prize.minimumPercentage}
+                      onChange={handlePrizeChange(index, 'minimumPercentage')}
+                      placeholder="Ex.: 80"
                     />
                   </div>
                   <div className="prize-row-actions">

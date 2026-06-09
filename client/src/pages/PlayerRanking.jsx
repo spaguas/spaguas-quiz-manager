@@ -24,6 +24,8 @@ const normalizePrize = (prize) => ({
   description: prize?.description ?? null,
   quantity: Number(prize?.quantity ?? 0),
   availableQuantity: Number(prize?.availableQuantity ?? 0),
+  minimumScore: Number(prize?.minimumScore ?? 0),
+  minimumPercentage: Number(prize?.minimumPercentage ?? 0),
   isAvailable: Boolean(prize?.isAvailable ?? Number(prize?.availableQuantity ?? 0) > 0),
   claimStatus: prize?.claimStatus ?? null,
   claimedAt: prize?.claimedAt ?? null,
@@ -339,6 +341,7 @@ const PlayerRanking = () => {
                 <strong>{prize.position}º lugar</strong>
                 <span>{prize.name}</span>
                 {prize.description && <small>{prize.description}</small>}
+                <small>mínimo: {prize.minimumPercentage.toFixed(2)}% de acertos</small>
                 <span className={`tag ${prize.isAvailable ? 'success' : 'danger'}`}>
                   {prize.availableQuantity}/{prize.quantity} disponível(is)
                 </span>

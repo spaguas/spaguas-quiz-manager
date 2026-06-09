@@ -480,12 +480,14 @@ describe('Quiz API integration', () => {
             description: 'Brinde do primeiro lugar',
             quantity: 3,
             availableQuantity: 2,
+            minimumPercentage: 100,
           },
           {
             position: 2,
             name: 'Copo personalizado',
             quantity: 1,
             availableQuantity: 0,
+            minimumPercentage: 100,
           },
         ],
       })
@@ -548,6 +550,7 @@ describe('Quiz API integration', () => {
       name: 'Garrafa térmica',
       quantity: 3,
       availableQuantity: 2,
+      minimumPercentage: 100,
       isAvailable: true,
     });
     expect(prizesRes.body.prizes[1]).toMatchObject({
@@ -555,6 +558,7 @@ describe('Quiz API integration', () => {
       name: 'Copo personalizado',
       quantity: 1,
       availableQuantity: 0,
+      minimumPercentage: 100,
       isAvailable: false,
     });
 
@@ -573,6 +577,124 @@ describe('Quiz API integration', () => {
       name: 'Garrafa térmica',
       availableQuantity: 1,
       isAvailable: true,
+    });
+  });
+
+  it('does not assign ranking prizes when the participant is below the configured minimum percentage', async () => {
+    const registerRes = await request(app)
+      .post('/api/auth/register')
+      .send({
+        name: 'Admin Minimo',
+        email: 'admin-prize-minimum@example.com',
+        password: 'Secret123',
+      })
+      .expect(201);
+
+    const authHeader = { Authorization: `Bearer ${registerRes.body.token}` };
+
+    const createQuizRes = await request(app)
+      .post('/api/admin/quizzes')
+      .set(authHeader)
+      .send({
+        title: 'Quiz com mínimo',
+        description: 'Quiz para validar mínimo de prêmio.',
+        isActive: true,
+      })
+      .expect(201);
+
+    const quizId = createQuizRes.body.id;
+
+    const firstQuestionRes = await request(app)
+      .post(`/api/admin/quizzes/${quizId}/questions`)
+      .set(authHeader)
+      .send({
+        text: 'Primeira pergunta correta?',
+        order: 1,
+        options: [
+          { text: 'Sim', isCorrect: true },
+          { text: 'Não', isCorrect: false },
+        ],
+      })
+      .expect(201);
+
+    const secondQuestionRes = await request(app)
+      .post(`/api/admin/quizzes/${quizId}/questions`)
+      .set(authHeader)
+      .send({
+        text: 'Segunda pergunta correta?',
+        order: 2,
+        options: [
+          { text: 'Sim', isCorrect: true },
+          { text: 'Não', isCorrect: false },
+        ],
+      })
+      .expect(201);
+
+    const firstWrongOption = firstQuestionRes.body.options.find((option) => option.isCorrect === false);
+    const secondCorrectOption = secondQuestionRes.body.options.find((option) => option.isCorrect === true);
+
+    const prizesRes = await request(app)
+      .patch(`/api/admin/quizzes/${quizId}/prizes`)
+      .set(authHeader)
+      .send({
+        prizes: [
+          {
+            position: 1,
+            name: 'Prêmio com mínimo',
+            quantity: 1,
+            availableQuantity: 1,
+            minimumPercentage: 100,
+          },
+        ],
+      })
+      .expect(200);
+
+    const submissionRes = await request(app)
+      .post(`/api/quizzes/${quizId}/submissions`)
+      .send({
+        userName: 'Primeiro sem mínimo',
+        userEmail: 'primeiro-sem-minimo@example.com',
+        durationSeconds: 10,
+        answers: [
+          {
+            questionId: firstQuestionRes.body.id,
+            optionId: firstWrongOption.id,
+          },
+          {
+            questionId: secondQuestionRes.body.id,
+            optionId: secondCorrectOption.id,
+          },
+        ],
+      })
+      .expect(201);
+
+    expect(submissionRes.body).toMatchObject({
+      position: 1,
+      score: 1,
+      prizes: [],
+      hasUnavailablePrize: false,
+    });
+
+    await request(app)
+      .post(`/api/quizzes/${quizId}/submissions/${submissionRes.body.submissionId}/prizes/${prizesRes.body.prizes[0].id}/claim`)
+      .send({
+        userEmail: 'primeiro-sem-minimo@example.com',
+        received: true,
+      })
+      .expect(400);
+
+    const rankingRes = await request(app)
+      .get(`/api/quizzes/${quizId}/ranking`)
+      .expect(200);
+
+    expect(rankingRes.body.ranking[0]).toMatchObject({
+      position: 1,
+      score: 1,
+      prizes: [],
+    });
+    expect(rankingRes.body.quiz.prizes[0]).toMatchObject({
+      name: 'Prêmio com mínimo',
+      minimumPercentage: 100,
     });
   });
 });

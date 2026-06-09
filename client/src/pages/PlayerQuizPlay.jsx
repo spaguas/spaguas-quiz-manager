@@ -835,6 +835,9 @@ const PlayerQuizPlay = () => {
                           <div>
                             <strong>{prize.name}</strong>
                             {prize.description && <p>{prize.description}</p>}
+                            <span className="tag info">
+                              mínimo: {Number(prize.minimumPercentage ?? 0).toFixed(2)}% de acertos
+                            </span>
                             <span className={`tag ${isUnavailable ? 'danger' : 'success'}`}>
                               {prize.availableQuantity}/{prize.quantity} disponível(is)
                             </span>

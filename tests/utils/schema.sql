@@ -27,6 +27,8 @@ CREATE TABLE "QuizPrize" (
   "description" TEXT,
   "quantity" INTEGER NOT NULL,
   "availableQuantity" INTEGER NOT NULL,
+  "minimumScore" INTEGER NOT NULL DEFAULT 0,
+  "minimumPercentage" DOUBLE PRECISION NOT NULL DEFAULT 0,
   "createdAt" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   "updatedAt" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT "QuizPrize_quizId_fkey" FOREIGN KEY ("quizId") REFERENCES "Quiz"("id") ON DELETE CASCADE
@@ -98,8 +100,6 @@ CREATE TABLE "SubmissionPrizeClaim" (
   CONSTRAINT "SubmissionPrizeClaim_submissionId_prizeId_key" UNIQUE ("submissionId", "prizeId")
 );
 
-CREATE INDEX "SubmissionPrizeClaim_prizeId_idx" ON "SubmissionPrizeClaim"("prizeId");
-
 CREATE TABLE "PasswordResetToken" (
   "id" SERIAL PRIMARY KEY,
   "token" TEXT NOT NULL UNIQUE,
@@ -109,8 +109,6 @@ CREATE TABLE "PasswordResetToken" (
   "used" BOOLEAN NOT NULL DEFAULT false,
   CONSTRAINT "PasswordResetToken_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE
 );
-
-CREATE INDEX "PasswordResetToken_userId_idx" ON "PasswordResetToken"("userId");
 
 CREATE TABLE "UserGamification" (
   "id" SERIAL PRIMARY KEY,
@@ -159,5 +157,3 @@ CREATE TABLE "GamificationEvent" (
   "createdAt" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT "GamificationEvent_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE
 );
-
-CREATE INDEX "GamificationEvent_userId_idx" ON "GamificationEvent"("userId");

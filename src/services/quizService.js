@@ -40,11 +40,21 @@ const mapPrize = (prize, claim = null) => ({
   description: prize.description,
   quantity: prize.quantity,
   availableQuantity: prize.availableQuantity,
+  minimumScore: prize.minimumScore ?? 0,
+  minimumPercentage: prize.minimumPercentage ?? 0,
   isAvailable: prize.availableQuantity > 0,
   claimStatus: claim?.status ?? null,
   claimedAt: claim?.claimedAt ?? null,
   declinedAt: claim?.declinedAt ?? null,
 });
+
+const isPrizeEligibleForSubmission = (prize, submission) => {
+  const minimumPercentage = prize.minimumPercentage ?? 0;
+  if (minimumPercentage > 0) {
+    return (submission.percentage ?? 0) >= minimumPercentage;
+  }
+  return (submission.score ?? 0) >= (prize.minimumScore ?? 0);
+};
 
 const buildPrizeAvailabilityByPosition = (prizes = []) => {
   const groups = new Map();
@@ -104,6 +114,19 @@ async function ensurePrizeClaimTable(client = prisma) {
 
   if (!prizeClaimTablePromise) {
     prizeClaimTablePromise = (async () => {
+      const existingTables = await client.$queryRaw`
+        SELECT table_name
+        FROM information_schema.tables
+        WHERE table_schema = 'public'
+          AND table_name = 'SubmissionPrizeClaim'
+        LIMIT 1
+      `;
+
+      if (existingTables.length) {
+        prizeClaimTableReady = true;
+        return;
+      }
+
       await client.$executeRawUnsafe(`
         CREATE TABLE IF NOT EXISTS "SubmissionPrizeClaim" (
           "id" SERIAL NOT NULL,
@@ -420,6 +443,8 @@ export async function updateQuizPrizes(quizId, prizes) {
       description: prize.description?.trim() || null,
       quantity: prize.quantity,
       availableQuantity: prize.availableQuantity,
+      minimumScore: prize.minimumScore ?? 0,
+      minimumPercentage: prize.minimumPercentage,
     }))
     .sort((a, b) => {
       if (a.position !== b.position) {
@@ -969,6 +994,7 @@ export async function createSubmission({ quizId, userName, userEmail, durationSe
   const position = betterResults + 1;
   const positionPrizes = quiz.prizes
     .filter((prize) => prize.position === position)
+    .filter((prize) => isPrizeEligibleForSubmission(prize, submission))
     .map((prize) => mapPrize(prize));
 
   return {
@@ -1069,6 +1095,7 @@ export async function confirmPrizeClaim({ quizId, submissionId, prizeId, userEma
       quizId: true,
       userEmail: true,
       score: true,
+      percentage: true,
       durationSeconds: true,
       createdAt: true,
     },
@@ -1092,6 +1119,10 @@ export async function confirmPrizeClaim({ quizId, submissionId, prizeId, userEma
   const position = await getSubmissionRankingPosition(submission);
   if (prize.position !== position) {
     throw new HttpError(400, 'Este prêmio não corresponde à posição atual do participante');
+  }
+
+  if (!isPrizeEligibleForSubmission(prize, submission)) {
+    throw new HttpError(400, 'Pontuação insuficiente para retirar este prêmio');
   }
 
   const result = await prisma.$transaction(async (tx) => {
@@ -1240,6 +1271,7 @@ export async function getRanking(quizId, limit = null) {
   const attachPrizes = (items) => items.map((item) => ({
     ...item,
     prizes: (prizesByPosition.get(item.position) ?? [])
+      .filter((prize) => isPrizeEligibleForSubmission(prize, item))
       .map((prize) => mapPrizeForSubmission(prize, item.submissionId, claimLookup)),
   }));
   const recentRanking = buildRecentRanking(fullRanking, 10);
@@ -1247,6 +1279,7 @@ export async function getRanking(quizId, limit = null) {
     ? {
         ...recentRanking[0],
         prizes: (prizesByPosition.get(recentRanking[0].position) ?? [])
+          .filter((prize) => isPrizeEligibleForSubmission(prize, recentRanking[0]))
           .map((prize) => mapPrizeForSubmission(prize, recentRanking[0].submissionId, claimLookup)),
       }
     : null;

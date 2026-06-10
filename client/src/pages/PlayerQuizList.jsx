@@ -26,6 +26,7 @@ const PlayerQuizList = () => {
         preCacheOfflineRoutes(
           response.data.flatMap((quiz) => [
             `/play/quiz/${quiz.id}`,
+            `/play/quiz/${quiz.id}/competitive`,
             `/play/quiz/${quiz.id}/ranking`,
             `/api/quizzes/${quiz.id}`,
             `/api/quizzes/${quiz.id}/ranking`,
@@ -92,6 +93,10 @@ const PlayerQuizList = () => {
                   <span>{quiz.questionCount}</span>
                 </div>
                 <div className="stat-item">
+                  <strong>Modo</strong>
+                  <span>{quiz.mode === 'COMPETITIVE' ? 'Competitivo' : 'Ranking'}</span>
+                </div>
+                <div className="stat-item">
                   <strong>Submissões</strong>
                   <span>{quiz.submissionCount}</span>
                 </div>
@@ -105,17 +110,25 @@ const PlayerQuizList = () => {
                   className="button"
                   type="button"
                   disabled={quiz.questionCount === 0}
-                  onClick={() => navigate(`/play/quiz/${quiz.id}`)}
+                  onClick={() =>
+                    navigate(quiz.mode === 'COMPETITIVE' ? `/play/quiz/${quiz.id}/competitive` : `/play/quiz/${quiz.id}`)
+                  }
                 >
-                  {quiz.questionCount === 0 ? 'Indisponível' : 'Iniciar quiz'}
+                  {quiz.questionCount === 0
+                    ? 'Indisponível'
+                    : quiz.mode === 'COMPETITIVE'
+                      ? 'Entrar no lobby'
+                      : 'Iniciar quiz'}
                 </button>
-                <button
-                  className="button ghost"
-                  type="button"
-                  onClick={() => navigate(`/play/quiz/${quiz.id}/ranking`)}
-                >
-                  Ver ranking
-                </button>
+                {quiz.mode !== 'COMPETITIVE' && (
+                  <button
+                    className="button ghost"
+                    type="button"
+                    onClick={() => navigate(`/play/quiz/${quiz.id}/ranking`)}
+                  >
+                    Ver ranking
+                  </button>
+                )}
               </div>
             </div>
           ))}

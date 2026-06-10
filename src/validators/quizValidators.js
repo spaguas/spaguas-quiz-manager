@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-const quizModeSchema = z.enum(['SEQUENTIAL', 'RANDOM']);
+const quizModeSchema = z.enum(['SEQUENTIAL', 'RANDOM', 'COMPETITIVE']);
 
 export const youtubeUrlSchema = z
   .string()
@@ -158,6 +158,7 @@ export const questionCreateSchema = z.object({
   quizId: z.number().int().positive(),
   text: z.string().min(3, 'Pergunta deve ter ao menos 3 caracteres'),
   order: z.number().int().min(1, 'Ordem deve ser igual ou maior que 1'),
+  timeLimitSeconds: z.number().int().min(5, 'Timer mínimo é de 5 segundos').max(600, 'Timer máximo é de 600 segundos').optional().default(30),
   options: z.array(optionSchema).min(2, 'Informe pelo menos 2 alternativas'),
 }).refine((data) => data.options.some((option) => option.isCorrect), {
   message: 'Pelo menos uma alternativa deve ser correta',
@@ -204,6 +205,22 @@ export const answerValidationSchema = z.object({
   quizId: z.number().int().positive(),
   questionId: z.number().int().positive(),
   optionId: z.number().int().positive(),
+});
+
+export const competitiveJoinSchema = z.object({
+  quizId: z.number().int().positive(),
+  userName: z.string().trim().min(2, 'Nome deve ter ao menos 2 caracteres'),
+  userEmail: z.string().trim().email('Informe um e-mail válido'),
+});
+
+export const competitiveTokenSchema = z.object({
+  quizId: z.number().int().positive(),
+  token: z.string().uuid('Sessão competitiva inválida'),
+});
+
+export const competitiveAnswerSchema = competitiveTokenSchema.extend({
+  optionId: z.number().int().positive(),
+  responseMs: z.number().int().min(0).max(600000).optional(),
 });
 
 export const participationCheckSchema = z.object({

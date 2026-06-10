@@ -192,9 +192,10 @@ const AdminQuizForm = () => {
           <select id="mode" name="mode" value={form.mode} onChange={handleChange}>
             <option value="SEQUENTIAL">Sequencial (ordem fixa)</option>
             <option value="RANDOM">Aleatório (ordem aleatória)</option>
+            <option value="COMPETITIVE">Competitivo (duelo entre 2 pessoas)</option>
           </select>
           <small style={{ color: '#64748b' }}>
-            No modo aleatório, as perguntas são sorteadas a cada tentativa.
+            No modo competitivo, duas pessoas entram em lobby e disputam uma pergunta sorteada com timer.
           </small>
         </div>
 

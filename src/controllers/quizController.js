@@ -7,6 +7,9 @@ import {
   questionCreateSchema,
   submissionSchema,
   answerValidationSchema,
+  competitiveJoinSchema,
+  competitiveTokenSchema,
+  competitiveAnswerSchema,
   participationCheckSchema,
   questionCopySchema,
 } from '../validators/quizValidators.js';
@@ -183,6 +186,50 @@ export async function validateQuestionAnswer(req, res, next) {
     });
 
     const result = await quizService.validateQuestionAnswer(payload);
+    return res.json(result);
+  } catch (error) {
+    return next(error);
+  }
+}
+
+export async function joinCompetitiveLobby(req, res, next) {
+  try {
+    const payload = competitiveJoinSchema.parse({
+      ...req.body,
+      quizId: Number(req.params.quizId),
+    });
+
+    const result = await quizService.joinCompetitiveLobby(payload);
+    return res.status(201).json(result);
+  } catch (error) {
+    return next(error);
+  }
+}
+
+export async function getCompetitiveLobbyStatus(req, res, next) {
+  try {
+    const payload = competitiveTokenSchema.parse({
+      quizId: Number(req.params.quizId),
+      token: req.params.token,
+    });
+
+    const result = await quizService.getCompetitiveLobbyStatus(payload);
+    return res.json(result);
+  } catch (error) {
+    return next(error);
+  }
+}
+
+export async function submitCompetitiveAnswer(req, res, next) {
+  try {
+    const payload = competitiveAnswerSchema.parse({
+      quizId: Number(req.params.quizId),
+      token: req.params.token,
+      optionId: Number(req.body?.optionId),
+      responseMs: req.body?.responseMs === undefined ? undefined : Number(req.body.responseMs),
+    });
+
+    const result = await quizService.submitCompetitiveAnswer(payload);
     return res.json(result);
   } catch (error) {
     return next(error);

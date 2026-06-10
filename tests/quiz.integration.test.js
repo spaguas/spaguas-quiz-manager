@@ -58,8 +58,8 @@ describe('Quiz API integration', () => {
       })
       .expect(201);
 
-    const questionId = questionRes.body.id;
-    const correctOption = questionRes.body.options.find((option) => option.isCorrect === true);
+    const questionId = firstQuestionRes.body.id;
+    const correctOption = firstQuestionRes.body.options.find((option) => option.isCorrect === true);
     expect(correctOption).toBeDefined();
 
     const listRes = await request(app)
@@ -166,6 +166,136 @@ describe('Quiz API integration', () => {
       backgroundVideoStart: null,
       backgroundVideoEnd: null,
     });
+  });
+
+  it('pairs two players in a competitive quiz, advances after both answer, and returns the winner', async () => {
+    const registerRes = await request(app)
+      .post('/api/auth/register')
+      .send({
+        name: 'Admin User',
+        email: 'admin-competitive@example.com',
+        password: 'Secret123',
+      })
+      .expect(201);
+
+    const authHeader = { Authorization: `Bearer ${registerRes.body.token}` };
+
+    const createQuizRes = await request(app)
+      .post('/api/admin/quizzes')
+      .set(authHeader)
+      .send({
+        title: 'Quiz Competitivo',
+        description: 'Quiz para duelo entre dois participantes.',
+        isActive: true,
+        mode: 'COMPETITIVE',
+      })
+      .expect(201);
+
+    const quizId = createQuizRes.body.id;
+
+    const questionRegistry = new Map();
+    const competitiveQuestions = [
+      {
+        text: 'Qual alternativa está correta?',
+        options: [
+          { text: 'Correta', isCorrect: true },
+          { text: 'Incorreta', isCorrect: false },
+        ],
+      },
+      {
+        text: 'Qual é a segunda correta?',
+        options: [
+          { text: 'Errada', isCorrect: false },
+          { text: 'Certa', isCorrect: true },
+        ],
+      },
+    ];
+
+    for (let index = 0; index < competitiveQuestions.length; index += 1) {
+      const questionPayload = competitiveQuestions[index];
+      const questionRes = await request(app)
+        .post(`/api/admin/quizzes/${quizId}/questions`)
+        .set(authHeader)
+        .send({
+          text: questionPayload.text,
+          order: index + 1,
+          timeLimitSeconds: 30,
+          options: questionPayload.options,
+        })
+        .expect(201);
+
+      questionRegistry.set(questionRes.body.id, {
+        correct: questionRes.body.options.find((option) => option.isCorrect === true).id,
+        wrong: questionRes.body.options.find((option) => option.isCorrect === false).id,
+      });
+    }
+
+    const firstJoinRes = await request(app)
+      .post(`/api/quizzes/${quizId}/competitive/lobby`)
+      .send({
+        userName: 'Jogador 1',
+        userEmail: 'jogador1@example.com',
+      })
+      .expect(201);
+
+    expect(firstJoinRes.body.status).toBe('WAITING');
+
+    const secondJoinRes = await request(app)
+      .post(`/api/quizzes/${quizId}/competitive/lobby`)
+      .send({
+        userName: 'Jogador 2',
+        userEmail: 'jogador2@example.com',
+      })
+      .expect(201);
+
+    expect(secondJoinRes.body.status).toBe('ACTIVE');
+    expect(secondJoinRes.body.question.options).toHaveLength(2);
+    expect(secondJoinRes.body.totalQuestions).toBe(2);
+    expect(secondJoinRes.body.opponent.userName).toBe('Jogador 1');
+    expect(secondJoinRes.body.scoreboard).toHaveLength(2);
+
+    const firstToken = firstJoinRes.body.token;
+    const secondToken = secondJoinRes.body.token;
+    const firstQuestionId = secondJoinRes.body.question.id;
+    const firstQuestionOptions = questionRegistry.get(firstQuestionId);
+
+    await request(app)
+      .post(`/api/quizzes/${quizId}/competitive/lobby/${firstToken}/answer`)
+      .send({ optionId: firstQuestionOptions.correct })
+      .expect(200);
+
+    const nextQuestionRes = await request(app)
+      .post(`/api/quizzes/${quizId}/competitive/lobby/${secondToken}/answer`)
+      .send({ optionId: firstQuestionOptions.wrong })
+      .expect(200);
+
+    expect(nextQuestionRes.body.status).toBe('ACTIVE');
+    expect(nextQuestionRes.body.currentQuestionNumber).toBe(2);
+    expect(nextQuestionRes.body.question.id).not.toBe(firstQuestionId);
+    expect(nextQuestionRes.body.scoreboard.find((item) => item.userName === 'Jogador 1').score).toBe(1);
+
+    const secondQuestionOptions = questionRegistry.get(nextQuestionRes.body.question.id);
+
+    await request(app)
+      .post(`/api/quizzes/${quizId}/competitive/lobby/${firstToken}/answer`)
+      .send({ optionId: secondQuestionOptions.correct })
+      .expect(200);
+
+    const completedRes = await request(app)
+      .post(`/api/quizzes/${quizId}/competitive/lobby/${secondToken}/answer`)
+      .send({ optionId: secondQuestionOptions.wrong })
+      .expect(200);
+
+    expect(completedRes.body.status).toBe('COMPLETED');
+
+    const finalStatusRes = await request(app)
+      .get(`/api/quizzes/${quizId}/competitive/lobby/${firstToken}`)
+      .expect(200);
+
+    expect(finalStatusRes.body.status).toBe('COMPLETED');
+    expect(finalStatusRes.body.result.didWin).toBe(true);
+    expect(finalStatusRes.body.result.answers).toHaveLength(2);
+    expect(finalStatusRes.body.result.answers.find((item) => item.userName === 'Jogador 1').score).toBe(2);
   });
 
   it('limits questions when quiz is random with a maximum defined', async () => {

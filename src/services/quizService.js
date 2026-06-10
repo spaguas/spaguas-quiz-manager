@@ -1,5 +1,6 @@
 import path from 'node:path';
 import fs from 'node:fs';
+import crypto from 'node:crypto';
 import prisma from '../config/prisma.js';
 import HttpError from '../utils/httpError.js';
 import appConfig from '../config/appConfig.js';
@@ -483,7 +484,7 @@ export async function updateQuizPrizes(quizId, prizes) {
   return getQuizByIdForAdmin(quizId);
 }
 
-export async function addQuestionToQuiz({ quizId, text, order, options }) {
+export async function addQuestionToQuiz({ quizId, text, order, timeLimitSeconds = 30, options }) {
   const quiz = await prisma.quiz.findUnique({
     where: { id: quizId },
   });
@@ -496,6 +497,7 @@ export async function addQuestionToQuiz({ quizId, text, order, options }) {
     data: {
       text,
       order,
+      timeLimitSeconds,
       quizId,
       options: {
         create: options.map((option) => ({
@@ -562,6 +564,7 @@ export async function copyQuestionsBetweenQuizzes({ sourceQuizId, targetQuizId }
           quizId: targetQuiz.id,
           text: question.text,
           order: initialOrder + index + 1,
+          timeLimitSeconds: question.timeLimitSeconds ?? 30,
           options: {
             create: question.options.map((option) => ({
               text: option.text,
@@ -651,6 +654,7 @@ export async function listActiveQuizzes() {
     description: quiz.description,
     createdAt: quiz.createdAt,
     mode: quiz.mode,
+    isCompetitive: quiz.mode === 'COMPETITIVE',
     questionLimit: quiz.questionLimit,
     questionCount: Math.min(
       quiz._count.questions,
@@ -798,6 +802,26 @@ export async function getQuizForPlay(quizId) {
     throw new HttpError(409, 'Quiz não possui perguntas disponíveis no momento');
   }
 
+  if (quiz.mode === 'COMPETITIVE') {
+    return {
+      id: quiz.id,
+      title: quiz.title,
+      description: quiz.description,
+      mode: quiz.mode,
+      questionLimit: quiz.questionLimit,
+      backgroundImageUrl: buildPublicUrl(quiz.backgroundImage),
+      headerImageUrl: buildPublicUrl(quiz.headerImage),
+      backgroundVideoUrl: quiz.backgroundVideoUrl || null,
+      backgroundVideoStart: quiz.backgroundVideoStart ?? 0,
+      backgroundVideoEnd: quiz.backgroundVideoEnd ?? null,
+      backgroundVideoLoop: quiz.backgroundVideoLoop ?? true,
+      backgroundVideoMuted: quiz.backgroundVideoMuted ?? true,
+      backgroundImageIntensity: quiz.backgroundImageIntensity ?? 0.65,
+      backgroundVideoIntensity: quiz.backgroundVideoIntensity ?? 0.65,
+      questions: [],
+    };
+  }
+
   const shuffleQuestions = (items) => {
     const array = [...items];
     for (let index = array.length - 1; index > 0; index -= 1) {
@@ -840,6 +864,7 @@ export async function getQuizForPlay(quizId) {
       id: question.id,
       text: question.text,
       order: question.order,
+      timeLimitSeconds: question.timeLimitSeconds ?? 30,
       options: question.options.map((option) => ({
         id: option.id,
         text: option.text,
@@ -892,6 +917,561 @@ export async function validateQuestionAnswer({ quizId, questionId, optionId }) {
     isCorrect: option.isCorrect,
     correctOptions,
   };
+}
+
+const competitiveMatchInclude = {
+  quiz: {
+    select: {
+      id: true,
+      title: true,
+      mode: true,
+      isActive: true,
+    },
+  },
+  question: {
+    include: {
+      options: {
+        select: {
+          id: true,
+          text: true,
+        },
+        orderBy: { id: 'asc' },
+      },
+    },
+  },
+  participants: {
+    orderBy: { slot: 'asc' },
+  },
+  answers: {
+    include: {
+      participant: true,
+      option: {
+        select: {
+          id: true,
+          text: true,
+        },
+      },
+    },
+    orderBy: [
+      { isCorrect: 'desc' },
+      { responseMs: 'asc' },
+      { answeredAt: 'asc' },
+    ],
+  },
+};
+
+const shuffleItems = (items) => {
+  const array = [...items];
+  for (let index = array.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [array[index], array[swapIndex]] = [array[swapIndex], array[index]];
+  }
+  return array;
+};
+
+const pickRandomItem = (items) => items[Math.floor(Math.random() * items.length)];
+
+const getQuestionOrder = (match) => {
+  if (Array.isArray(match.questionOrder) && match.questionOrder.length) {
+    return match.questionOrder.map((item) => Number(item)).filter(Number.isInteger);
+  }
+  return [match.questionId].filter(Number.isInteger);
+};
+
+const buildParticipantAvatarUrl = (email) => {
+  const hash = crypto
+    .createHash('md5')
+    .update(String(email || '').trim().toLowerCase())
+    .digest('hex');
+  return `https://www.gravatar.com/avatar/${hash}?s=96&d=mp`;
+};
+
+const getCompetitiveQuestions = async (quizId, questionLimit = null, client = prisma) => {
+  const questions = await client.question.findMany({
+    where: { quizId },
+    include: {
+      options: {
+        select: {
+          id: true,
+          text: true,
+          isCorrect: true,
+        },
+      },
+    },
+  });
+
+  if (!questions.length) {
+    throw new HttpError(409, 'Quiz não possui perguntas disponíveis no momento');
+  }
+
+  const shuffled = shuffleItems(questions);
+  const limit = Math.min(questionLimit ?? shuffled.length, shuffled.length);
+  return shuffled.slice(0, limit);
+};
+
+const getParticipantStats = (match) =>
+  match.participants.map((participant) => {
+    const answers = match.answers.filter((answer) => answer.participantId === participant.id);
+    const correctAnswers = answers.filter((answer) => answer.isCorrect);
+    const totalResponseMs = correctAnswers.reduce((total, answer) => total + answer.responseMs, 0);
+
+    return {
+      participantId: participant.id,
+      userName: participant.userName,
+      userEmail: participant.userEmail,
+      avatarUrl: buildParticipantAvatarUrl(participant.userEmail),
+      score: correctAnswers.length,
+      answeredQuestions: answers.length,
+      totalResponseMs,
+    };
+  });
+
+const compareParticipantStats = (a, b) => {
+  if (b.score !== a.score) {
+    return b.score - a.score;
+  }
+
+  if (a.totalResponseMs !== b.totalResponseMs) {
+    return a.totalResponseMs - b.totalResponseMs;
+  }
+
+  return a.participantId - b.participantId;
+};
+
+const areAllParticipantsAnsweredCurrentQuestion = (match) => {
+  if (!match.participants.length) {
+    return false;
+  }
+
+  const currentQuestionAnswers = match.answers.filter((answer) => answer.questionId === match.questionId);
+  return match.participants.every((participant) =>
+    currentQuestionAnswers.some((answer) => answer.participantId === participant.id),
+  );
+};
+
+const advanceCompetitiveMatch = async (match) => {
+  const questionOrder = getQuestionOrder(match);
+  const nextQuestionIndex = (match.currentQuestionIndex ?? 0) + 1;
+
+  if (nextQuestionIndex >= questionOrder.length) {
+    return prisma.competitiveMatch.update({
+      where: { id: match.id },
+      data: {
+        status: 'COMPLETED',
+        endsAt: new Date(),
+      },
+      include: competitiveMatchInclude,
+    });
+  }
+
+  const nextQuestion = await prisma.question.findFirst({
+    where: {
+      id: questionOrder[nextQuestionIndex],
+      quizId: match.quizId,
+    },
+    select: {
+      id: true,
+      timeLimitSeconds: true,
+    },
+  });
+
+  if (!nextQuestion) {
+    return prisma.competitiveMatch.update({
+      where: { id: match.id },
+      data: { status: 'COMPLETED' },
+      include: competitiveMatchInclude,
+    });
+  }
+
+  const startsAt = new Date();
+  const endsAt = new Date(startsAt.getTime() + (nextQuestion.timeLimitSeconds ?? 30) * 1000);
+
+  return prisma.competitiveMatch.update({
+    where: { id: match.id },
+    data: {
+      questionId: nextQuestion.id,
+      currentQuestionIndex: nextQuestionIndex,
+      startsAt,
+      endsAt,
+    },
+    include: competitiveMatchInclude,
+  });
+};
+
+const synchronizeCompetitiveMatch = async (match) => {
+  if (!match || match.status !== 'ACTIVE') {
+    return match;
+  }
+
+  const timedOut = match.endsAt && new Date(match.endsAt).getTime() <= Date.now();
+  if (timedOut || areAllParticipantsAnsweredCurrentQuestion(match)) {
+    return advanceCompetitiveMatch(match);
+  }
+
+  return match;
+};
+
+const buildCompetitiveResult = (match) => {
+  if (!['COMPLETED', 'EXPIRED'].includes(match.status)) {
+    return null;
+  }
+
+  const stats = getParticipantStats(match).sort(compareParticipantStats);
+  const [winner, runnerUp] = stats;
+
+  if (!winner || winner.score === 0) {
+    return {
+      winnerParticipantId: null,
+      outcome: 'NO_CORRECT_ANSWER',
+      message: 'Ninguém acertou perguntas nesta disputa.',
+      standings: stats,
+    };
+  }
+
+  const isTie =
+    runnerUp &&
+    runnerUp.score === winner.score &&
+    runnerUp.totalResponseMs === winner.totalResponseMs;
+
+  if (isTie) {
+    return {
+      winnerParticipantId: null,
+      outcome: 'TIE',
+      message: `Empate com ${winner.score} ponto(s).`,
+      standings: stats,
+    };
+  }
+
+  return {
+    winnerParticipantId: winner.participantId,
+    outcome: 'WINNER',
+    message: `${winner.userName} venceu com ${winner.score} ponto(s).`,
+    standings: stats,
+  };
+};
+
+const mapCompetitiveMatchState = (match, participantToken) => {
+  const participant = match.participants.find((item) => item.token === participantToken);
+  if (!participant) {
+    throw new HttpError(404, 'Participante não encontrado nesta disputa');
+  }
+
+  const ownAnswer = match.answers.find((answer) =>
+    answer.participantId === participant.id && answer.questionId === match.questionId,
+  ) ?? null;
+  const isFinished = ['COMPLETED', 'EXPIRED'].includes(match.status);
+  const now = Date.now();
+  const endsAtMs = match.endsAt ? new Date(match.endsAt).getTime() : null;
+  const remainingMs = endsAtMs ? Math.max(0, endsAtMs - now) : null;
+  const result = buildCompetitiveResult(match);
+  const questionOrder = getQuestionOrder(match);
+  const currentQuestionAnswers = match.answers.filter((answer) => answer.questionId === match.questionId);
+  const statsByParticipant = new Map(
+    getParticipantStats(match).map((stats) => [stats.participantId, stats]),
+  );
+  const currentQuestionIndex = match.currentQuestionIndex ?? 0;
+  const opponent = match.participants.find((item) => item.id !== participant.id) ?? null;
+
+  return {
+    matchId: match.id,
+    token: participant.token,
+    quiz: {
+      id: match.quiz.id,
+      title: match.quiz.title,
+    },
+    status: match.status,
+    startsAt: match.startsAt,
+    endsAt: match.endsAt,
+    remainingMs,
+    currentQuestionIndex,
+    currentQuestionNumber: questionOrder.length ? currentQuestionIndex + 1 : 0,
+    totalQuestions: questionOrder.length,
+    participant: {
+      id: participant.id,
+      slot: participant.slot,
+      userName: participant.userName,
+      avatarUrl: buildParticipantAvatarUrl(participant.userEmail),
+    },
+    opponent: opponent
+      ? {
+          id: opponent.id,
+          slot: opponent.slot,
+          userName: opponent.userName,
+          avatarUrl: buildParticipantAvatarUrl(opponent.userEmail),
+        }
+      : null,
+    scoreboard: match.participants.map((item) => {
+      const stats = statsByParticipant.get(item.id) ?? {
+        score: 0,
+        answeredQuestions: 0,
+        totalResponseMs: 0,
+      };
+      return {
+        participantId: item.id,
+        slot: item.slot,
+        userName: match.status === 'WAITING' && item.id !== participant.id ? `Competidor ${item.slot}` : item.userName,
+        avatarUrl: buildParticipantAvatarUrl(item.userEmail),
+        isSelf: item.id === participant.id,
+        score: stats.score,
+        answeredQuestions: stats.answeredQuestions,
+        totalResponseMs: stats.totalResponseMs,
+        hasAnsweredCurrentQuestion: currentQuestionAnswers.some((answer) => answer.participantId === item.id),
+      };
+    }),
+    participants: match.participants.map((item) => ({
+      id: item.id,
+      slot: item.slot,
+      userName: isFinished || match.status === 'ACTIVE' || item.id === participant.id ? item.userName : `Competidor ${item.slot}`,
+      avatarUrl: buildParticipantAvatarUrl(item.userEmail),
+      isSelf: item.id === participant.id,
+      hasAnswered: isFinished
+        ? match.answers.some((answer) => answer.participantId === item.id)
+        : currentQuestionAnswers.some((answer) => answer.participantId === item.id),
+    })),
+    question: match.status === 'ACTIVE' || isFinished
+      ? {
+          id: match.question.id,
+          text: match.question.text,
+          order: match.question.order,
+          timeLimitSeconds: match.question.timeLimitSeconds ?? 30,
+          options: match.question.options.map((option) => ({ id: option.id, text: option.text })),
+        }
+      : null,
+    ownAnswer: ownAnswer
+      ? {
+          questionId: ownAnswer.questionId,
+          optionId: ownAnswer.optionId,
+          isCorrect: isFinished ? ownAnswer.isCorrect : null,
+          responseMs: ownAnswer.responseMs,
+          answeredAt: ownAnswer.answeredAt,
+        }
+      : null,
+    result: result
+      ? {
+          ...result,
+          didWin: result.winnerParticipantId === participant.id,
+          standings: result.standings.map((standing) => ({
+            ...standing,
+            isSelf: standing.participantId === participant.id,
+          })),
+          answers: match.participants.map((item) => {
+            const participantAnswers = match.answers.filter((entry) => entry.participantId === item.id);
+            const stats = statsByParticipant.get(item.id);
+            return {
+              participantId: item.id,
+              userName: item.userName,
+              avatarUrl: buildParticipantAvatarUrl(item.userEmail),
+              isSelf: item.id === participant.id,
+              answered: participantAnswers.length > 0,
+              score: stats?.score ?? 0,
+              answeredQuestions: participantAnswers.length,
+              totalResponseMs: stats?.totalResponseMs ?? 0,
+            };
+          }),
+        }
+      : null,
+  };
+};
+
+const getCompetitiveMatchByToken = async ({ quizId, token }) => {
+  const participant = await prisma.competitiveParticipant.findUnique({
+    where: { token },
+    select: { matchId: true },
+  });
+
+  if (!participant) {
+    throw new HttpError(404, 'Sessão competitiva não encontrada');
+  }
+
+  const match = await prisma.competitiveMatch.findFirst({
+    where: {
+      id: participant.matchId,
+      quizId,
+    },
+    include: competitiveMatchInclude,
+  });
+
+  if (!match) {
+    throw new HttpError(404, 'Disputa não encontrada para este quiz');
+  }
+
+  return synchronizeCompetitiveMatch(match);
+};
+
+export async function joinCompetitiveLobby({ quizId, userName, userEmail }) {
+  const normalizedEmail = userEmail.trim().toLowerCase();
+  const quiz = await prisma.quiz.findUnique({
+    where: { id: quizId },
+    select: {
+      id: true,
+      title: true,
+      mode: true,
+      isActive: true,
+      questionLimit: true,
+    },
+  });
+
+  if (!quiz || !quiz.isActive) {
+    throw new HttpError(404, 'Quiz não encontrado ou inativo');
+  }
+
+  if (quiz.mode !== 'COMPETITIVE') {
+    throw new HttpError(400, 'Este quiz não está configurado como competitivo');
+  }
+
+  const existingParticipant = await prisma.competitiveParticipant.findFirst({
+    where: {
+      userEmail: normalizedEmail,
+      match: {
+        quizId,
+        status: { in: ['WAITING', 'ACTIVE'] },
+      },
+    },
+    orderBy: { joinedAt: 'desc' },
+  });
+
+  if (existingParticipant) {
+    const match = await getCompetitiveMatchByToken({ quizId, token: existingParticipant.token });
+    return mapCompetitiveMatchState(match, existingParticipant.token);
+  }
+
+  const match = await prisma.$transaction(async (tx) => {
+    const waitingMatches = await tx.competitiveMatch.findMany({
+      where: { quizId, status: 'WAITING' },
+      include: {
+        participants: {
+          orderBy: { slot: 'asc' },
+        },
+        question: true,
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    const eligibleMatches = waitingMatches.filter((item) =>
+      item.participants.length === 1 &&
+      item.participants[0].userEmail !== normalizedEmail,
+    );
+    const waitingMatch = eligibleMatches.length ? pickRandomItem(eligibleMatches) : null;
+
+    if (waitingMatch) {
+      const startsAt = new Date();
+      const durationSeconds = waitingMatch.question.timeLimitSeconds ?? 30;
+      const endsAt = new Date(startsAt.getTime() + durationSeconds * 1000);
+      await tx.competitiveParticipant.create({
+        data: {
+          matchId: waitingMatch.id,
+          slot: 2,
+          userName: userName.trim(),
+          userEmail: normalizedEmail,
+        },
+      });
+      return tx.competitiveMatch.update({
+        where: { id: waitingMatch.id },
+        data: {
+          status: 'ACTIVE',
+          startsAt,
+          endsAt,
+        },
+        include: competitiveMatchInclude,
+      });
+    }
+
+    const questions = await getCompetitiveQuestions(quizId, quiz.questionLimit, tx);
+    const [firstQuestion] = questions;
+    return tx.competitiveMatch.create({
+      data: {
+        quizId,
+        questionId: firstQuestion.id,
+        questionOrder: questions.map((question) => question.id),
+        currentQuestionIndex: 0,
+        status: 'WAITING',
+        participants: {
+          create: {
+            slot: 1,
+            userName: userName.trim(),
+            userEmail: normalizedEmail,
+          },
+        },
+      },
+      include: competitiveMatchInclude,
+    });
+  });
+
+  const participant = match.participants.find((item) => item.userEmail === normalizedEmail);
+  return mapCompetitiveMatchState(match, participant.token);
+}
+
+export async function getCompetitiveLobbyStatus({ quizId, token }) {
+  const match = await getCompetitiveMatchByToken({ quizId, token });
+  return mapCompetitiveMatchState(match, token);
+}
+
+export async function submitCompetitiveAnswer({ quizId, token, optionId, responseMs }) {
+  const match = await getCompetitiveMatchByToken({ quizId, token });
+  if (match.status !== 'ACTIVE') {
+    throw new HttpError(409, 'Esta disputa ainda não está ativa ou já foi encerrada');
+  }
+
+  const participant = match.participants.find((item) => item.token === token);
+  if (!participant) {
+    throw new HttpError(404, 'Participante não encontrado nesta disputa');
+  }
+
+  const now = new Date();
+  if (match.endsAt && now.getTime() > new Date(match.endsAt).getTime()) {
+    const synchronized = await synchronizeCompetitiveMatch(match);
+    return mapCompetitiveMatchState(synchronized, token);
+  }
+
+  const option = await prisma.option.findFirst({
+    where: {
+      id: optionId,
+      questionId: match.questionId,
+    },
+    select: {
+      id: true,
+      isCorrect: true,
+    },
+  });
+
+  if (!option) {
+    throw new HttpError(400, 'Alternativa inválida para esta pergunta');
+  }
+
+  const serverResponseMs = match.startsAt
+    ? Math.max(0, now.getTime() - new Date(match.startsAt).getTime())
+    : responseMs ?? 0;
+  const existingAnswer = await prisma.competitiveAnswer.findUnique({
+    where: {
+      matchId_participantId_questionId: {
+        matchId: match.id,
+        participantId: participant.id,
+        questionId: match.questionId,
+      },
+    },
+  });
+
+  if (!existingAnswer) {
+    await prisma.competitiveAnswer.create({
+      data: {
+        matchId: match.id,
+        participantId: participant.id,
+        questionId: match.questionId,
+        optionId: option.id,
+        isCorrect: option.isCorrect,
+        responseMs: serverResponseMs,
+        answeredAt: now,
+      },
+    });
+  }
+
+  const refreshed = await prisma.competitiveMatch.findUnique({
+    where: { id: match.id },
+    include: competitiveMatchInclude,
+  });
+
+  const synchronized = await synchronizeCompetitiveMatch(refreshed);
+  return mapCompetitiveMatchState(synchronized, token);
 }
 
 export async function validateParticipation({ quizId, userEmail }) {
@@ -1637,6 +2217,32 @@ export async function resetQuizData(quizId) {
   await ensurePrizeClaimTable();
 
   const result = await prisma.$transaction(async (tx) => {
+    const competitiveMatches = await tx.competitiveMatch.findMany({
+      where: { quizId },
+      select: { id: true },
+    });
+    const competitiveMatchIds = competitiveMatches.map((match) => match.id);
+
+    const deletedCompetitiveAnswers = competitiveMatchIds.length
+      ? await tx.competitiveAnswer.deleteMany({
+          where: {
+            matchId: { in: competitiveMatchIds },
+          },
+        })
+      : { count: 0 };
+
+    const deletedCompetitiveParticipants = competitiveMatchIds.length
+      ? await tx.competitiveParticipant.deleteMany({
+          where: {
+            matchId: { in: competitiveMatchIds },
+          },
+        })
+      : { count: 0 };
+
+    const deletedCompetitiveMatches = await tx.competitiveMatch.deleteMany({
+      where: { quizId },
+    });
+
     const submissionIds = await tx.submission.findMany({
       where: { quizId },
       select: { id: true },
@@ -1674,6 +2280,9 @@ export async function resetQuizData(quizId) {
       deletedPrizeClaims: deletedPrizeClaims.count,
       deletedAnswers: deletedAnswers.count,
       deletedSubmissions: deletedSubmissions.count,
+      deletedCompetitiveMatches: deletedCompetitiveMatches.count,
+      deletedCompetitiveParticipants: deletedCompetitiveParticipants.count,
+      deletedCompetitiveAnswers: deletedCompetitiveAnswers.count,
       restoredPrizes: prizes.length,
     };
   });

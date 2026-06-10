@@ -129,7 +129,13 @@ const AdminQuizList = () => {
                   </div>
                   <div className="stat-item">
                     <strong>Modo</strong>
-                    <span>{quiz.mode === 'RANDOM' ? 'Aleatório' : 'Sequencial'}</span>
+                    <span>
+                      {quiz.mode === 'COMPETITIVE'
+                        ? 'Competitivo'
+                        : quiz.mode === 'RANDOM'
+                          ? 'Aleatório'
+                          : 'Sequencial'}
+                    </span>
                   </div>
                   <div className="stat-item">
                     <strong>Criado em</strong>
@@ -162,7 +168,9 @@ const AdminQuizList = () => {
                   <button
                     className="button ghost"
                     type="button"
-                    onClick={() => navigate(`/play/quiz/${quiz.id}`)}
+                    onClick={() =>
+                      navigate(quiz.mode === 'COMPETITIVE' ? `/play/quiz/${quiz.id}/competitive` : `/play/quiz/${quiz.id}`)
+                    }
                   >
                     Pré-visualizar quiz
                   </button>

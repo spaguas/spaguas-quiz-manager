@@ -5,6 +5,7 @@ import api from '../services/api.js';
 const createEmptyForm = (order) => ({
   text: '',
   order,
+  timeLimitSeconds: '30',
   options: [
     { text: '', isCorrect: true },
     { text: '', isCorrect: false },
@@ -649,11 +650,18 @@ const AdminQuestionManager = () => {
       return;
     }
 
+    const parsedTimeLimit = Number(form.timeLimitSeconds);
+    if (!Number.isInteger(parsedTimeLimit) || parsedTimeLimit < 5 || parsedTimeLimit > 600) {
+      setFormError('Informe um timer entre 5 e 600 segundos.');
+      return;
+    }
+
     try {
       setSaving(true);
       const payload = {
         text: form.text.trim(),
         order: form.order || nextOrder,
+        timeLimitSeconds: parsedTimeLimit,
         options: trimmedOptions.filter((option) => option.text.length > 0),
       };
 
@@ -926,9 +934,10 @@ const AdminQuestionManager = () => {
           <select id="quiz-mode" value={quizDetails.mode} onChange={handleQuizModeChange}>
             <option value="SEQUENTIAL">Sequencial (ordem fixa)</option>
             <option value="RANDOM">Aleatório (ordem aleatória)</option>
+            <option value="COMPETITIVE">Competitivo (duelo entre 2 pessoas)</option>
           </select>
           <small style={{ color: '#64748b' }}>
-            No modo aleatório, a ordem das perguntas pode variar a cada participação.
+            No modo competitivo, duas pessoas entram em lobby e disputam uma pergunta sorteada com timer.
           </small>
         </div>
         <div className="form-field">
@@ -1295,6 +1304,21 @@ const AdminQuestionManager = () => {
         </div>
 
         <div className="form-field">
+          <label htmlFor="question-time-limit">Timer da pergunta (segundos)</label>
+          <input
+            id="question-time-limit"
+            type="number"
+            min={5}
+            max={600}
+            value={form.timeLimitSeconds}
+            onChange={(event) =>
+              setForm((prev) => ({ ...prev, timeLimitSeconds: event.target.value }))
+            }
+            placeholder="Ex.: 30"
+          />
+        </div>
+
+        <div className="form-field">
           <label>Alternativas</label>
           <div className="options-list">
             {form.options.map((option, index) => (
@@ -1359,7 +1383,7 @@ const AdminQuestionManager = () => {
                       {question.order}. {question.text}
                     </strong>
                     <div style={{ marginTop: '0.35rem', color: '#64748b', fontSize: '0.85rem' }}>
-                      {question.options.length} alternativa(s)
+                      {question.options.length} alternativa(s) - timer: {question.timeLimitSeconds ?? 30}s
                     </div>
                   </div>
                   <div className="table-actions">

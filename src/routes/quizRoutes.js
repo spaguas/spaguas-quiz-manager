@@ -14,6 +14,9 @@ import {
   getQuizForPlay,
   validateQuestionAnswer,
   validateParticipation,
+  joinCompetitiveLobby,
+  getCompetitiveLobbyStatus,
+  submitCompetitiveAnswer,
   createSubmission,
   confirmPrizeClaim,
   getRanking,
@@ -55,6 +58,9 @@ router.delete('/admin/quizzes/:quizId/ranking', authenticate, requireAdmin, clea
 // Rotas públicas
 router.get('/quizzes', listActiveQuizzes);
 router.get('/quizzes/:quizId', getQuizForPlay);
+router.post('/quizzes/:quizId/competitive/lobby', joinCompetitiveLobby);
+router.get('/quizzes/:quizId/competitive/lobby/:token', getCompetitiveLobbyStatus);
+router.post('/quizzes/:quizId/competitive/lobby/:token/answer', submitCompetitiveAnswer);
 router.post('/quizzes/:quizId/questions/:questionId/validate', validateQuestionAnswer);
 router.post('/quizzes/:quizId/validate-participation', validateParticipation);
 router.post('/quizzes/:quizId/submissions', createSubmission);

@@ -306,6 +306,12 @@ const PlayerQuizPlay = () => {
   }, [currentQuestionIndex]);
 
   useEffect(() => {
+    if (quiz?.mode === 'COMPETITIVE') {
+      navigate(`/play/quiz/${quizId}/competitive`, { replace: true });
+    }
+  }, [navigate, quiz?.mode, quizId]);
+
+  useEffect(() => {
     const shouldUseImage = Boolean(quiz?.backgroundImageUrl) && !backgroundVideoUrl;
 
     if (shouldUseImage) {

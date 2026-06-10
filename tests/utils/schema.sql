@@ -1,4 +1,6 @@
 CREATE TYPE "UserRole" AS ENUM ('ADMIN', 'USER');
+CREATE TYPE "QuizMode" AS ENUM ('SEQUENTIAL', 'RANDOM', 'COMPETITIVE');
+CREATE TYPE "CompetitiveMatchStatus" AS ENUM ('WAITING', 'ACTIVE', 'COMPLETED', 'EXPIRED');
 
 CREATE TABLE "User" (
   "id" SERIAL PRIMARY KEY,
@@ -15,6 +17,17 @@ CREATE TABLE "Quiz" (
   "title" TEXT NOT NULL,
   "description" TEXT NOT NULL,
   "isActive" BOOLEAN NOT NULL DEFAULT true,
+  "mode" "QuizMode" NOT NULL DEFAULT 'SEQUENTIAL',
+  "questionLimit" INTEGER,
+  "backgroundImage" TEXT,
+  "headerImage" TEXT,
+  "backgroundVideoUrl" TEXT,
+  "backgroundVideoStart" INTEGER DEFAULT 0,
+  "backgroundVideoEnd" INTEGER,
+  "backgroundVideoLoop" BOOLEAN NOT NULL DEFAULT true,
+  "backgroundVideoMuted" BOOLEAN NOT NULL DEFAULT true,
+  "backgroundImageIntensity" DOUBLE PRECISION NOT NULL DEFAULT 0.65,
+  "backgroundVideoIntensity" DOUBLE PRECISION NOT NULL DEFAULT 0.65,
   "createdAt" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   "updatedAt" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -41,6 +54,7 @@ CREATE TABLE "Question" (
   "quizId" INTEGER NOT NULL,
   "text" TEXT NOT NULL,
   "order" INTEGER NOT NULL,
+  "timeLimitSeconds" INTEGER NOT NULL DEFAULT 30,
   "createdAt" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT "Question_quizId_fkey" FOREIGN KEY ("quizId") REFERENCES "Quiz"("id") ON DELETE CASCADE
 );
@@ -102,6 +116,56 @@ CREATE TABLE "SubmissionAnswer" (
 );
 
 CREATE UNIQUE INDEX "SubmissionAnswer_submissionId_questionId_key" ON "SubmissionAnswer"("submissionId", "questionId");
+
+CREATE TABLE "CompetitiveMatch" (
+  "id" TEXT PRIMARY KEY,
+  "quizId" INTEGER NOT NULL,
+  "questionId" INTEGER NOT NULL,
+  "questionOrder" JSONB NOT NULL DEFAULT '[]',
+  "currentQuestionIndex" INTEGER NOT NULL DEFAULT 0,
+  "status" "CompetitiveMatchStatus" NOT NULL DEFAULT 'WAITING',
+  "startsAt" TIMESTAMP,
+  "endsAt" TIMESTAMP,
+  "createdAt" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updatedAt" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT "CompetitiveMatch_quizId_fkey" FOREIGN KEY ("quizId") REFERENCES "Quiz"("id") ON DELETE CASCADE,
+  CONSTRAINT "CompetitiveMatch_questionId_fkey" FOREIGN KEY ("questionId") REFERENCES "Question"("id") ON DELETE CASCADE
+);
+
+CREATE INDEX "CompetitiveMatch_quizId_status_createdAt_idx" ON "CompetitiveMatch"("quizId", "status", "createdAt");
+
+CREATE TABLE "CompetitiveParticipant" (
+  "id" SERIAL PRIMARY KEY,
+  "matchId" TEXT NOT NULL,
+  "token" TEXT NOT NULL UNIQUE,
+  "slot" INTEGER NOT NULL,
+  "userName" TEXT NOT NULL,
+  "userEmail" TEXT NOT NULL,
+  "joinedAt" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT "CompetitiveParticipant_matchId_fkey" FOREIGN KEY ("matchId") REFERENCES "CompetitiveMatch"("id") ON DELETE CASCADE,
+  CONSTRAINT "CompetitiveParticipant_matchId_slot_key" UNIQUE ("matchId", "slot"),
+  CONSTRAINT "CompetitiveParticipant_matchId_userEmail_key" UNIQUE ("matchId", "userEmail")
+);
+
+CREATE INDEX "CompetitiveParticipant_userEmail_idx" ON "CompetitiveParticipant"("userEmail");
+
+CREATE TABLE "CompetitiveAnswer" (
+  "id" SERIAL PRIMARY KEY,
+  "matchId" TEXT NOT NULL,
+  "participantId" INTEGER NOT NULL,
+  "questionId" INTEGER NOT NULL,
+  "optionId" INTEGER NOT NULL,
+  "isCorrect" BOOLEAN NOT NULL,
+  "responseMs" INTEGER NOT NULL,
+  "answeredAt" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT "CompetitiveAnswer_matchId_fkey" FOREIGN KEY ("matchId") REFERENCES "CompetitiveMatch"("id") ON DELETE CASCADE,
+  CONSTRAINT "CompetitiveAnswer_participantId_fkey" FOREIGN KEY ("participantId") REFERENCES "CompetitiveParticipant"("id") ON DELETE CASCADE,
+  CONSTRAINT "CompetitiveAnswer_questionId_fkey" FOREIGN KEY ("questionId") REFERENCES "Question"("id") ON DELETE CASCADE,
+  CONSTRAINT "CompetitiveAnswer_optionId_fkey" FOREIGN KEY ("optionId") REFERENCES "Option"("id") ON DELETE CASCADE,
+  CONSTRAINT "CompetitiveAnswer_matchId_participantId_questionId_key" UNIQUE ("matchId", "participantId", "questionId")
+);
+
+CREATE INDEX "CompetitiveAnswer_matchId_isCorrect_responseMs_idx" ON "CompetitiveAnswer"("matchId", "isCorrect", "responseMs");
 
 CREATE TABLE "SubmissionPrizeClaim" (
   "id" SERIAL PRIMARY KEY,
